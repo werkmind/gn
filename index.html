@@ -62,6 +62,8 @@
   .port.mine { background:var(--c); color:#111; }
   .port.mine .n, .port.mine .who { color:#111; }
   .port.busy { opacity:.45; }
+  /* a co-op partner: same kart colour, dashed */
+  .port.partner.free { border-style:dashed; }
   .ghost { background:var(--panel); color:var(--fg); padding:10px 14px; border-radius:12px; font-size:15px; }
 
   /* pad */
@@ -107,6 +109,8 @@
   .slider { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; font-size:15px; color:var(--muted); }
   .slider b { color:var(--fg); }
   .slider input { width:100%; accent-color:var(--a); touch-action:auto; }
+  .field { display:flex; flex-direction:column; gap:4px; font-size:15px; color:var(--muted); }
+  .field input { padding:10px 12px; border-radius:10px; border:2px solid var(--line); background:var(--bg); color:var(--fg); font-size:17px; touch-action:auto; user-select:text; -webkit-user-select:text; }
   #toast { position:absolute; left:50%; top:20%; transform:translateX(-50%); background:#000c; padding:12px 18px; border-radius:12px; display:none; z-index:6; text-align:center; max-width:90vw; }
 </style>
 </head>
@@ -133,7 +137,7 @@
 <section class="screen" id="pad">
   <div class="top">
     <div class="sh" data-b="L">L</div>
-    <button class="chip" id="menubtn"><span class="dot" id="dot"></span><span>Spieler <b id="pn">?</b></span><span>☰</span></button>
+    <button class="chip" id="menubtn"><span class="dot" id="dot"></span><span id="pl">Spieler <b id="pn">?</b></span><span>☰</span></button>
     <div class="sh z" data-b="Z">Z</div>
     <div class="sh" data-b="R">R</div>
   </div>
@@ -160,6 +164,9 @@
   </div>
   <div id="menu">
     <div class="box">
+      <h3>Name im Spiel</h3>
+      <label class="field">Dein Name<input id="m-name" maxlength="16" autocomplete="nickname" enterkeyhint="done"></label>
+      <label class="field">Teamname, wenn ihr zu zweit auf einem Kart fahrt<input id="m-team" maxlength="16" placeholder="leer: „A &amp; B“" enterkeyhint="done"></label>
       <h3>Lenken</h3>
       <div class="seg"><button id="m-touch">Touch-Stick</button><button id="m-gyro">Neigen (Gyro)</button></div>
       <button class="ghost" id="m-center">Neigung neu zentrieren</button>
@@ -187,6 +194,7 @@
   let clientId = store.get('id', '');
   if (!clientId) { clientId = Math.random().toString(36).slice(2) + Date.now().toString(36); store.set('id', clientId); }
   let name = store.get('name', '');
+  let team = store.get('team', '');
   let wantPort = 0;          // the port we asked for, 1-4 (0 none)
   let myPort = 0;            // the port the server gave us
   let status = null;
@@ -241,7 +249,7 @@
     ws.onopen = () => {
       fails = 0; setConn('');
       $('dot').classList.add('on');
-      if (name) ws.send(JSON.stringify({ t:'hello', name, id:clientId }));
+      if (name) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId }));
       if (name && wantPort) ws.send(JSON.stringify({ t:'take', port:wantPort }));
     };
     ws.onmessage = (e) => {
@@ -273,7 +281,7 @@
     if (!n) { $('name').focus(); return; }
     name = n.slice(0, 16); store.set('name', name);
     $('hello').textContent = name;
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'hello', name, id:clientId }));
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId }));
     goFullscreen();
     show('ports');
     renderPorts();
@@ -288,18 +296,33 @@
   if (!standalone && ios) $('installhint').textContent = 'Tipp für Vollbild: Teilen-Symbol → „Zum Home-Bildschirm“, dann von dort starten.';
 
   // ---- ports ----
-  // Several game windows (LAN mode): players 5-8 are window 2's players 1-4, and so on.
-  const portName = (p) => (status && status.ports.length > 4 ? 'Fenster ' + Math.ceil(p / 4) + ' · ' : '') + 'Spieler ' + ((p - 1) % 4 + 1);
+  // Each port: its game window (LAN mode), its kart 1-4 there, and whether it drives or is
+  // the co-op partner. The first window has eight: the drivers of karts 1-4, then their
+  // partners. Without that from the game (older versions), every four are a window.
+  function portInfo(p) {
+    const s = status && status.ports[p - 1];
+    const ports = status ? status.ports : [];
+    const multi = ports.some(q => q.inst > 1) || (!ports.some(q => q.inst) && ports.length > 4);
+    const karts = ports.some(q => q.role === 'partner');
+    return { inst: s && s.inst ? s.inst : Math.ceil(p / 4), kart: s && s.kart ? s.kart : (p - 1) % 4 + 1,
+             partner: !!(s && s.role === 'partner'), multi, karts };
+  }
+  const roleName = (q) => q.karts ? 'Kart ' + q.kart + ' · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler ' + q.kart;
+  const portName = (p) => { const q = portInfo(p); return (q.multi ? 'Fenster ' + q.inst + ' · ' : '') + roleName(q); };
   function renderPorts() {
     const grid = $('portgrid');
     const count = status ? status.ports.length : 4;
     grid.classList.toggle('many', count > 4);
-    if (grid.children.length !== count) {
+    const layout = status ? status.ports.map(q => q.inst + ':' + q.kart + ':' + q.role).join() : '';
+    if (grid.children.length !== count || grid.dataset.layout !== layout) {
       grid.innerHTML = '';
+      grid.dataset.layout = layout;
       for (let i = 1; i <= count; i++) {
+        const q = portInfo(i);
         const b = document.createElement('button');
-        b.className = 'port'; b.style.setProperty('--c', COLORS[(i - 1) % 4]);
-        b.innerHTML = (count > 4 ? '<div class="win">Fenster ' + Math.ceil(i / 4) + '</div>' : '') + '<div class="n">' + ((i - 1) % 4 + 1) + '</div><div class="who"></div>';
+        b.className = 'port' + (q.partner ? ' partner' : ''); b.style.setProperty('--c', COLORS[q.kart - 1]);
+        const win = (q.multi ? 'Fenster ' + q.inst : '') + (q.karts ? (q.multi ? ' · ' : '') + (q.partner ? 'Beifahrer' : 'Fahrer') : '');
+        b.innerHTML = (win ? '<div class="win">' + win + '</div>' : '') + '<div class="n">' + (q.karts ? 'Kart ' : '') + q.kart + '</div><div class="who"></div>';
         b.onclick = () => take(i);
         grid.appendChild(b);
       }
@@ -324,17 +347,19 @@
 
   // ---- pad ----
   function enterPad() {
-    $('pn').textContent = status && status.ports.length > 4 ? Math.ceil(myPort / 4) + '·' + ((myPort - 1) % 4 + 1) : myPort;
-    document.documentElement.style.setProperty('--pc', COLORS[(myPort - 1) % 4]);
+    const q = portInfo(myPort);
+    $('pl').innerHTML = (q.multi ? q.inst + ' · ' : '') + (q.karts ? 'Kart <b>' + q.kart + '</b> · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler <b>' + q.kart + '</b>');
+    document.documentElement.style.setProperty('--pc', COLORS[q.kart - 1]);
     $('menu').classList.remove('on');
     show('pad');
     wake();
   }
   // Like the runtime does for keyboards and gamepads (src/controls.cpp): the game takes
-  // PADClamp's 15 off and then steps in fours (KartGamePad), so steering starts at 19 from
-  // the centre and full lock is 75. Any movement at all starts at the first step. The
-  // start is set per phone in the menu (dead zone compensation), with the tilt for full lock.
-  let deadzone = +store.get('dz2', 19), sens = +store.get('sens', 18);
+  // PADClamp's 15 off and then steps in fours (KartGamePad); the first step (19 from the
+  // centre) does not turn the kart yet, the second (23) does (tools/selftest.sh steer), and
+  // full lock is 75. Any movement at all starts at 23. The start is set per phone in the
+  // menu (dead zone compensation), with the tilt for full lock.
+  let deadzone = +store.get('dz3', 23), sens = +store.get('sens', 18);
   function axis(v, lo, hi) {
     v = Math.max(-1, Math.min(1, v));
     const a = Math.abs(v);
@@ -442,12 +467,16 @@
   $('m-center').onclick = () => { tiltZero = null; toast('Zentriert'); };
   function showTuning() {
     $('sens').value = sens; $('sensval').textContent = sens + '° Neigung';
-    $('dz').value = deadzone; $('dzval').textContent = deadzone ? deadzone + ' (Standard 19)' : 'aus';
+    $('dz').value = deadzone; $('dzval').textContent = deadzone ? deadzone + ' (Standard 23)' : 'aus';
   }
   $('sens').oninput = (e) => { sens = +e.target.value; store.set('sens', sens); showTuning(); };
-  $('dz').oninput = (e) => { deadzone = +e.target.value; store.set('dz2', deadzone); showTuning(); };
+  $('dz').oninput = (e) => { deadzone = +e.target.value; store.set('dz3', deadzone); showTuning(); };
   showTuning();
-  $('menubtn').onclick = () => $('menu').classList.add('on');
+  // The names the game shows over the kart and in the results.
+  function sendHello() { if (ws && ws.readyState === 1 && name) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId })); }
+  $('m-name').onchange = (e) => { const n = e.target.value.trim().slice(0, 16); if (!n) { e.target.value = name; return; } name = n; store.set('name', name); $('hello').textContent = name; sendHello(); };
+  $('m-team').onchange = (e) => { team = e.target.value.trim().slice(0, 16); store.set('team', team); sendHello(); };
+  $('menubtn').onclick = () => { $('m-name').value = name; $('m-team').value = team; $('menu').classList.add('on'); };
   $('m-close').onclick = () => $('menu').classList.remove('on');
   $('m-port').onclick = () => { $('menu').classList.remove('on'); show('ports'); renderPorts(); };
   $('m-full').onclick = () => { goFullscreen(); $('menu').classList.remove('on'); };
