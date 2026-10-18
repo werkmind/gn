@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Double Dash">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Double Dash · Game Night</title>
+<style>
+  :root {
+    --bg:#111; --panel:#1c1c1f; --line:#333; --fg:#f2f2f2; --muted:#9a9aa2;
+    --a:#2fbf55; --b:#e0453a; --xy:#d9d9de; --z:#7a5cff;
+    --p1:#e0453a; --p2:#3a7be0; --p3:#2fbf55; --p4:#f0b429;
+    /* the shorter side of the screen: everything on the pad scales with it */
+    --s: min(100dvw, 100dvh);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:600 16px/1.25 -apple-system, system-ui, sans-serif; overflow:hidden; overscroll-behavior:none; }
+  body { position:fixed; inset:0; touch-action:none; }
+  .screen { position:absolute; inset:0; display:none; padding:max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .screen.on { display:flex; }
+  button { font:inherit; color:inherit; border:0; cursor:pointer; touch-action:manipulation; }
+  input { font:inherit; }
+
+  /* join */
+  #join { flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center; overflow:auto; touch-action:auto; }
+  #join h1 { margin:0; font-size:clamp(24px, 7vmin, 40px); }
+  #join p { margin:0; color:var(--muted); font-weight:500; }
+  #room { width:min(340px, 90vw); padding:12px 16px; border-radius:14px; border:2px solid var(--line); background:var(--panel); color:var(--fg); font-size:28px; letter-spacing:.3em; text-align:center; text-transform:uppercase; touch-action:auto; user-select:text; -webkit-user-select:text; }
+  #room[hidden] { display:none; }
+  .conn { color:var(--muted); font-size:14px; font-weight:500; }
+  .conn.bad { color:var(--p4); }
+  #name { width:min(340px, 90vw); padding:14px 16px; border-radius:14px; border:2px solid var(--line); background:var(--panel); color:var(--fg); font-size:20px; text-align:center; touch-action:auto; user-select:text; -webkit-user-select:text; }
+  .primary { background:var(--a); color:#08140b; padding:14px 28px; border-radius:14px; font-size:20px; min-width:min(340px, 90vw); }
+  .hint { color:var(--muted); font-size:14px; font-weight:500; max-width:420px; }
+
+  /* ports */
+  #ports { flex-direction:column; gap:12px; }
+  #ports header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  #ports h2 { margin:0; font-size:clamp(18px, 5vmin, 28px); }
+  #ports .grid { flex:1; display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; min-height:0; overflow:auto; touch-action:auto; }
+  @media (min-aspect-ratio: 3/2) { #ports .grid { grid-template-columns:repeat(4, 1fr); } }
+  #ports .grid.many { grid-template-columns:repeat(4, 1fr); gap:8px; grid-auto-rows:minmax(64px, 1fr); }
+  .port .win { color:var(--muted); font-size:12px; }
+  .port.mine .win { color:#111; }
+  #ports .grid.many .port { gap:0; padding:4px; }
+  #ports .grid.many .port .n { font-size:clamp(18px, 6vmin, 34px); line-height:1.1; }
+  #ports .grid.many .port .who { font-size:12px; white-space:nowrap; }
+  .seg button { white-space:nowrap; }
+  .port { border-radius:18px; background:var(--panel); border:3px solid transparent; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:8px; min-height:0; }
+  .port .n { font-size:clamp(28px, 10vmin, 56px); color:var(--c); }
+  .port .who { color:var(--muted); font-size:15px; text-align:center; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .port.free { border-color:var(--c); }
+  .port.mine { background:var(--c); color:#111; }
+  .port.mine .n, .port.mine .who { color:#111; }
+  .port.busy { opacity:.45; }
+  .ghost { background:var(--panel); color:var(--fg); padding:10px 14px; border-radius:12px; font-size:15px; }
+
+  /* pad */
+  #pad { flex-direction:column; padding-top:max(8px, env(safe-area-inset-top)); }
+  .top { display:flex; gap:10px; align-items:stretch; height:calc(var(--s) * .17); min-height:48px; }
+  .sh { flex:1; border-radius:14px; background:#38383d; display:flex; align-items:center; justify-content:center; font-size:calc(var(--s) * .07); }
+  .sh.down { background:#5c5c63; }
+  .chip { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 14px; border-radius:14px; background:var(--panel); font-size:clamp(13px, 3.6vmin, 18px); }
+  .chip .dot { width:12px; height:12px; border-radius:50%; background:#c33; }
+  .chip .dot.on { background:var(--a); }
+  .chip b { color:var(--pc); }
+  .main { flex:1; display:flex; min-height:0; gap:10px; margin-top:10px; }
+  .left, .right { flex:1; position:relative; min-width:0; }
+  .right { container-type:size; }
+  #stickzone { position:absolute; inset:0; touch-action:none; }
+  #base { position:absolute; width:min(calc(var(--s) * .52), 92%); aspect-ratio:1; border-radius:50%; border:3px solid #3a3a40; background:#1a1a1d; left:50%; top:55%; transform:translate(-50%,-50%); }
+  #knob { position:absolute; width:42%; height:42%; border-radius:50%; background:#6a6a72; left:50%; top:50%; transform:translate(-50%,-50%); }
+  #wheel { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--muted); font-size:clamp(13px, 3.4vmin, 17px); text-align:center; pointer-events:none; }
+  #wheel svg { width:calc(var(--s) * .38); height:calc(var(--s) * .38); transition:transform .04s linear; }
+  body.gyro #wheel { display:flex; }
+  body.gyro #base { opacity:.18; }
+  .cluster { position:absolute; right:0; bottom:0; width:min(100cqw, 100cqh, calc(var(--s) * .78)); aspect-ratio:1; }
+  @media (orientation: portrait) { .cluster { width:min(100cqw, 100cqh); } }
+  .btn { position:absolute; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:calc(var(--s) * .07); color:#111; }
+  .btn.down { filter:brightness(1.35); transform:scale(.93); }
+  #A { background:var(--a); width:42%; height:42%; right:16%; bottom:14%; font-size:calc(var(--s) * .1); }
+  #B { background:var(--b); width:25%; height:25%; right:60%; bottom:4%; color:#fff; }
+  #X { background:var(--xy); width:21%; height:21%; right:0; bottom:56%; border-radius:38%; }
+  #Y { background:var(--xy); width:21%; height:21%; right:36%; bottom:62%; border-radius:38%; }
+  #Z { background:var(--z); color:#fff; width:26%; height:15%; right:0; bottom:84%; border-radius:12px; font-size:calc(var(--s) * .055); }
+  #S { background:#3e3e44; color:var(--fg); width:18%; height:18%; right:68%; bottom:72%; font-size:calc(var(--s) * .035); }
+  #S.down { background:#6a6a72; }
+
+  /* menu */
+  #menu { position:absolute; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; z-index:5; padding:16px; }
+  #menu.on { display:flex; }
+  #menu .box { background:var(--panel); border-radius:20px; padding:18px; width:min(420px, 100%); display:flex; flex-direction:column; gap:10px; max-height:100%; overflow:auto; }
+  #menu h3 { margin:0 0 4px; }
+  .seg { display:flex; background:#111; border-radius:12px; padding:4px; gap:4px; }
+  .seg button { flex:1; padding:10px; border-radius:9px; background:transparent; color:var(--muted); }
+  .seg button.on { background:#3a3a40; color:var(--fg); }
+  #menu .ghost { width:100%; text-align:left; }
+  /* how to play: alone or two on one kart */
+  .style { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+  .style .seg { flex:0 0 auto; }
+  .partners { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:14px; }
+  .partners button { background:var(--panel); color:var(--fg); border:2px solid var(--line); border-radius:999px; padding:6px 12px; font-size:14px; }
+  .partners button.on { border-color:var(--a); background:#16301d; }
+  .partners .with { color:var(--a); }
+
+  /* the course vote */
+  #vote { position:absolute; inset:0; background:var(--bg); display:none; flex-direction:column; gap:10px; z-index:7; padding:max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); touch-action:auto; }
+  #vote.on { display:flex; }
+  #vote header { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  #vote h2 { margin:0; font-size:clamp(18px, 5vmin, 26px); }
+  #vote .left { flex:0 0 auto; font-size:clamp(20px, 6vmin, 32px); color:var(--p4); font-variant-numeric:tabular-nums; }
+  #vote .sub { color:var(--muted); font-weight:500; font-size:14px; }
+  .cups { flex:1; min-height:0; display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; overflow:auto; }
+  @media (min-aspect-ratio: 3/2) { .cups { grid-template-columns:repeat(4, 1fr); } }
+  .cup { display:flex; flex-direction:column; gap:6px; }
+  .cup h4 { margin:0; font-size:13px; color:var(--muted); font-weight:600; }
+  .course { background:var(--panel); border:2px solid transparent; border-radius:12px; padding:8px 10px; text-align:left; font-size:clamp(13px, 3.4vmin, 16px); display:flex; justify-content:space-between; gap:6px; }
+  .course .n { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .course.mine { border-color:var(--a); background:#16301d; }
+  #toast { position:absolute; left:50%; top:20%; transform:translateX(-50%); background:#000c; padding:12px 18px; border-radius:12px; display:none; z-index:6; text-align:center; max-width:90vw; }
+</style>
+</head>
+<body>
+
+<section class="screen" id="join">
+  <h1>Game Night</h1>
+  <p>Mario Kart: Double Dash!!</p>
+  <input id="room" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" hidden>
+  <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="nickname" enterkeyhint="go">
+  <button class="primary" id="go">Los</button>
+  <div class="hint" id="installhint"></div>
+</section>
+
+<section class="screen" id="ports">
+  <header>
+    <h2>Hallo <span id="hello"></span>, welcher Spieler?</h2>
+    <button class="ghost" id="rename">Name ändern</button>
+  </header>
+  <div class="conn" id="conn"></div>
+  <div class="style">
+    <div class="seg"><button id="st-solo">Allein</button><button id="st-team">Im Team</button></div>
+    <div class="partners" id="partners"></div>
+  </div>
+  <div class="grid" id="portgrid"></div>
+</section>
+
+<section id="vote">
+  <header>
+    <div><h2>Welche Strecke?</h2><div class="sub" id="votesub">Jedes Kart hat eine Stimme.</div></div>
+    <div class="left" id="voteleft"></div>
+  </header>
+  <div class="cups" id="cups"></div>
+</section>
+
+<section class="screen" id="pad">
+  <div class="top">
+    <div class="sh" data-b="L">L</div>
+    <button class="chip" id="menubtn"><span class="dot" id="dot"></span><span>Spieler <b id="pn">?</b></span><span>☰</span></button>
+    <div class="sh" data-b="R">R</div>
+  </div>
+  <div class="main">
+    <div class="left">
+      <div id="stickzone"><div id="base"><div id="knob"></div></div></div>
+      <div id="wheel">
+        <svg viewBox="0 0 100 100" id="wheelsvg" fill="none" stroke="currentColor" stroke-width="7"><circle cx="50" cy="50" r="42"/><circle cx="50" cy="50" r="9" fill="currentColor"/><path d="M8 50h33M59 50h33M50 59v33"/></svg>
+        <div>Handy neigen zum Lenken</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="cluster">
+        <div class="btn" id="Z" data-b="Z">Z</div>
+        <div class="btn" id="S" data-b="START">START</div>
+        <div class="btn" id="Y" data-b="Y">Y</div>
+        <div class="btn" id="X" data-b="X">X</div>
+        <div class="btn" id="B" data-b="B">B</div>
+        <div class="btn" id="A" data-b="A">A</div>
+      </div>
+    </div>
+  </div>
+  <div id="menu">
+    <div class="box">
+      <h3>Lenken</h3>
+      <div class="seg"><button id="m-touch">Touch-Stick</button><button id="m-gyro">Neigen (Gyro)</button></div>
+      <button class="ghost" id="m-center">Neigung neu zentrieren</button>
+      <button class="ghost" id="m-port">Spieler wechseln</button>
+      <button class="ghost" id="m-full">Vollbild</button>
+      <button class="ghost" id="m-leave">Aufhören</button>
+      <button class="primary" id="m-close">Weiterspielen</button>
+    </div>
+  </div>
+</section>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const BITS = { LEFT:0x0001, RIGHT:0x0002, DOWN:0x0004, UP:0x0008, Z:0x0010, R:0x0020, L:0x0040, A:0x0100, B:0x0200, X:0x0400, Y:0x0800, START:0x1000 };
+  const COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('gn.' + k); return v === null ? d : v; } catch (_) { return d; } },
+    set(k, v) { try { localStorage.setItem('gn.' + k, v); } catch (_) {} },
+  };
+  let clientId = store.get('id', '');
+  if (!clientId) { clientId = Math.random().toString(36).slice(2) + Date.now().toString(36); store.set('id', clientId); }
+  let name = store.get('name', '');
+  let wantPort = 0;          // the port we asked for, 1-4 (0 none)
+  let myPort = 0;            // the port the server gave us
+  let status = null;
+  let ws = null;
+  let mode = store.get('steer', 'touch');
+  let myId = 0;              // our public player id, from the server
+  let style = store.get('style', 'solo'), partner = 0;
+  const CUPS = [
+    ['Pilz-Cup', ['Luigi Circuit', 'Peach Beach', 'Baby Park', 'Dry Dry Desert']],
+    ['Blumen-Cup', ['Mushroom Bridge', 'Mario Circuit', 'Daisy Cruiser', 'Waluigi Stadium']],
+    ['Stern-Cup', ['Sherbet Land', 'Mushroom City', 'Yoshi Circuit', 'DK Mountain']],
+    ['Spezial-Cup', ['Wario Colosseum', 'Dino Dino Jungle', 'Bowser\'s Castle', 'Rainbow Road']],
+  ];
+  const COURSES = CUPS.flatMap((c) => c[1]);
+  let lastWinner = -1;
+  const state = { buttons:0 };
+  let stickX = 0, stickY = 0, tiltX = 0, tiltZero = null;
+
+  function toast(t, ms) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', ms || 2200); }
+  function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
+
+  // ---- where the game is ----
+  // Served by the game itself (/play, /pad) the game is right here. Anywhere else this is
+  // the fixed join page: the room code leads to the game's tunnel address, which the game
+  // posts to ntfy.sh.
+  const HOSTED = !/^\/(play|pad)\/?$/.test(location.pathname);
+  const params = new URLSearchParams(location.search);
+  let room = (params.get('r') || store.get('room', '')).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // ?s=<address> skips the lookup and goes straight to a game (for testing, or a fixed setup).
+  const direct = /^https?:\/\/[\w.:-]+$/.test(params.get('s') || '') ? params.get('s') : '';
+  let server = direct || (HOSTED ? '' : location.origin);
+  let fails = 0;
+  function setConn(t, bad) { const el = $('conn'); el.textContent = t || ''; el.classList.toggle('bad', !!bad); }
+  async function lookup() {
+    if (!room) return false;
+    setConn('Suche Raum ' + room + ' …');
+    try {
+      const r = await fetch('https://ntfy.sh/mkdd-gn-' + room.toLowerCase() + '/json?poll=1&since=12h', { cache:'no-store' });
+      let url = '';
+      for (const line of (await r.text()).split('\n')) {
+        try { const m = JSON.parse(line); if (m.event === 'message') { const u = JSON.parse(m.message).url; if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(u)) url = u; } } catch (_) {}
+      }
+      if (!url) { setConn('Raum ' + room + ' gibt es gerade nicht. Läuft das Spiel?', true); return false; }
+      server = url;
+      return true;
+    } catch (_) { setConn('Keine Verbindung zum Internet?', true); return false; }
+  }
+
+  // ---- connection ----
+  let connecting = false;
+  async function connect() {
+    if (connecting) return;
+    connecting = true;
+    if (HOSTED && !direct && (!server || fails >= 3)) {
+      fails = 0;
+      if (!(await lookup())) { connecting = false; setTimeout(connect, 4000); return; }
+    }
+    connecting = false;
+    if (!server) return;
+    ws = new WebSocket(server.replace(/^http/, 'ws') + '/ws');
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => {
+      fails = 0; setConn('');
+      $('dot').classList.add('on');
+      if (name) ws.send(JSON.stringify({ t:'hello', name, id:clientId }));
+      if (name && wantPort) ws.send(JSON.stringify({ t:'take', port:wantPort }));
+    };
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.ports) { status = m; renderPorts(); renderStyle(); renderVote(); return; }
+      if (m.t === 'me') { myId = m.id; sendPref(); return; }
+      if (m.t === 'port') { myPort = m.port; wantPort = m.port; store.set('port', String(myPort)); enterPad(); }
+      else if (m.t === 'taken') { toast(portName(m.port) + ' ist schon belegt.'); wantPort = 0; show('ports'); }
+      else if (m.t === 'kicked') { myPort = 0; wantPort = 0; toast('Du wurdest am Bildschirm abgemeldet.'); show('ports'); }
+      else if (m.t === 'rumble' && navigator.vibrate) navigator.vibrate(m.on ? 2000 : 0);
+    };
+    ws.onclose = () => {
+      $('dot').classList.remove('on');
+      fails++;
+      if (fails >= 2) setConn('Verbindung weg, versuche es wieder …', true);
+      setTimeout(connect, 800);
+    };
+  }
+
+  // ---- join ----
+  $('name').value = name;
+  if (HOSTED) { $('room').hidden = false; $('room').value = room; }
+  function join() {
+    if (HOSTED) {
+      const r = $('room').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (r.length < 3) { $('room').focus(); return; }
+      if (r !== room) { room = r; store.set('room', r); server = ''; if (ws) ws.close(); else connect(); }
+    }
+    const n = $('name').value.trim();
+    if (!n) { $('name').focus(); return; }
+    name = n.slice(0, 16); store.set('name', name);
+    $('hello').textContent = name;
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'hello', name, id:clientId }));
+    goFullscreen();
+    show('ports');
+    renderPorts();
+  }
+  $('go').onclick = join;
+  $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
+  $('room').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('name').focus(); });
+  $('rename').onclick = () => { show('join'); $('name').focus(); };
+
+  const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (!standalone && ios) $('installhint').textContent = 'Tipp für Vollbild: Teilen-Symbol → „Zum Home-Bildschirm“, dann von dort starten.';
+
+  // ---- ports ----
+  // Several game windows (LAN mode): players 5-8 are window 2's players 1-4, and so on.
+  const portName = (p) => (status && status.ports.length > 4 ? 'Fenster ' + Math.ceil(p / 4) + ' · ' : '') + 'Spieler ' + ((p - 1) % 4 + 1);
+  function renderPorts() {
+    const grid = $('portgrid');
+    const count = status ? status.ports.length : 4;
+    grid.classList.toggle('many', count > 4);
+    if (grid.children.length !== count) {
+      grid.innerHTML = '';
+      for (let i = 1; i <= count; i++) {
+        const b = document.createElement('button');
+        b.className = 'port'; b.style.setProperty('--c', COLORS[(i - 1) % 4]);
+        b.innerHTML = (count > 4 ? '<div class="win">Fenster ' + Math.ceil(i / 4) + '</div>' : '') + '<div class="n">' + ((i - 1) % 4 + 1) + '</div><div class="who"></div>';
+        b.onclick = () => take(i);
+        grid.appendChild(b);
+      }
+    }
+    for (let i = 1; i <= count; i++) {
+      const b = grid.children[i - 1];
+      const p = status && status.ports[i - 1];
+      const phone = p && p.phone;
+      const mine = i === myPort;
+      const desk = p && p.desktop && p.desktop.length ? p.desktop.join(' + ') : '';
+      b.classList.toggle('mine', mine);
+      b.classList.toggle('busy', !!phone && !mine);
+      b.classList.toggle('free', !phone);
+      b.querySelector('.who').textContent = mine ? 'Du' : phone ? phone : desk ? 'frei · auch ' + desk : 'frei';
+    }
+  }
+  function take(port) {
+    if (!ws || ws.readyState !== 1) { toast('Noch nicht verbunden …'); return; }
+    wantPort = port;
+    ws.send(JSON.stringify({ t:'take', port }));
+  }
+
+  // ---- alone or in a team ----
+  function sendPref() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'pref', style, partner })); }
+  function setStyle(s) { style = s; if (s !== 'team') partner = 0; store.set('style', s); sendPref(); renderStyle(); }
+  $('st-solo').onclick = () => setStyle('solo');
+  $('st-team').onclick = () => setStyle('team');
+  function myKart() { return status && status.karts ? status.karts.find((k) => k.ids.includes(myId)) : null; }
+  function renderStyle() {
+    $('st-solo').classList.toggle('on', style !== 'team');
+    $('st-team').classList.toggle('on', style === 'team');
+    const el = $('partners');
+    el.innerHTML = '';
+    if (style !== 'team') return;
+    const kart = myKart();
+    if (kart && kart.ids.length === 2) {
+      const other = kart.names[kart.ids[0] === myId ? 1 : 0];
+      const s = document.createElement('span'); s.className = 'with'; s.textContent = 'Du fährst mit ' + other + '.';
+      el.appendChild(s);
+    } else el.appendChild(document.createTextNode('Mit wem?'));
+    const others = (status && status.players || []).filter((p) => p.id !== myId && p.style === 'team');
+    for (const p of [{ id:0, name:'Egal' }, ...others]) {
+      const b = document.createElement('button');
+      b.textContent = p.name + (p.partner === myId && p.id ? ' (will mit dir)' : '');
+      b.classList.toggle('on', partner === p.id);
+      b.onclick = () => { partner = p.id; sendPref(); renderStyle(); };
+      el.appendChild(b);
+    }
+    if (!others.length) el.appendChild(document.createTextNode('Noch niemand sonst will im Team fahren.'));
+  }
+
+  // ---- the course vote ----
+  function renderVote() {
+    const v = status && status.vote;
+    if (!v) return;
+    if (v.winner >= 0 && v.winner !== lastWinner && !v.active) toast('Gewählt: ' + COURSES[v.winner], 4000);
+    lastWinner = v.winner;
+    $('vote').classList.toggle('on', !!v.active && !!name);
+    if (!v.active) return;
+    const cups = $('cups');
+    if (!cups.children.length) {
+      CUPS.forEach(([cup, names], c) => {
+        const col = document.createElement('div'); col.className = 'cup';
+        col.innerHTML = '<h4>' + cup + '</h4>';
+        names.forEach((n, i) => {
+          const b = document.createElement('button'); b.className = 'course';
+          b.innerHTML = '<span></span><span class="n"></span>';
+          b.firstChild.textContent = n;
+          b.onclick = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'vote', course:c * 4 + i })); if (navigator.vibrate) navigator.vibrate(15); };
+          col.appendChild(b);
+        });
+        cups.appendChild(col);
+      });
+    }
+    const kart = myKart(), mine = kart ? kart.vote : -1;
+    const buttons = cups.querySelectorAll('.course');
+    buttons.forEach((b, i) => { b.classList.toggle('mine', i === mine); b.lastChild.textContent = v.tally[i] ? v.tally[i] : ''; });
+    $('voteleft').textContent = Math.ceil(v.remaining / 1000) + ' s';
+    $('votesub').textContent = !kart ? 'Du wartest noch auf einen Teampartner, deine Stimme zählt dann fürs Kart.'
+      : kart.ids.length === 2 ? 'Eine Stimme für euer Kart, die letzte von euch beiden zählt.' : 'Jedes Kart hat eine Stimme.';
+  }
+
+  // ---- pad ----
+  function enterPad() {
+    $('pn').textContent = status && status.ports.length > 4 ? Math.ceil(myPort / 4) + '·' + ((myPort - 1) % 4 + 1) : myPort;
+    document.documentElement.style.setProperty('--pc', COLORS[(myPort - 1) % 4]);
+    $('menu').classList.remove('on');
+    show('pad');
+    wake();
+  }
+  function packet() {
+    let sx = mode === 'gyro' ? tiltX : stickX;
+    const sy = stickY;
+    sx = Math.round(128 + Math.max(-1, Math.min(1, sx)) * 100);
+    const y = Math.round(128 + Math.max(-1, Math.min(1, sy)) * 100);
+    const l = (state.buttons & BITS.L) ? 255 : 0, r = (state.buttons & BITS.R) ? 255 : 0;
+    return new Uint8Array([state.buttons & 255, state.buttons >> 8, sx, y, 128, 128, l, r]);
+  }
+  function send() { if (ws && ws.readyState === 1 && myPort) ws.send(packet()); }
+  setInterval(send, 33);
+
+  const counts = {}, held = new Map();
+  function press(b, down) {
+    counts[b] = (counts[b] || 0) + (down ? 1 : -1);
+    const on = counts[b] > 0;
+    for (const el of document.querySelectorAll('[data-b="' + b + '"]')) el.classList.toggle('down', on);
+    if (on) state.buttons |= BITS[b]; else state.buttons &= ~BITS[b];
+    if (down && navigator.vibrate) navigator.vibrate(8);
+    send();
+  }
+  const buttonAt = (x, y) => { const el = document.elementFromPoint(x, y); const b = el && el.closest('[data-b]'); return b ? b.dataset.b : null; };
+  $('pad').addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#stickzone') || e.target.closest('#menu') || e.target.closest('#menubtn')) return;
+    const b = buttonAt(e.clientX, e.clientY); if (!b) return;
+    e.preventDefault(); held.set(e.pointerId, b); press(b, true);
+  }, { passive:false });
+  document.addEventListener('pointermove', (e) => {
+    if (!held.has(e.pointerId)) return;
+    const now = buttonAt(e.clientX, e.clientY), was = held.get(e.pointerId);
+    if (now && now !== was) { press(was, false); press(now, true); held.set(e.pointerId, now); }
+  });
+  const lift = (e) => { if (!held.has(e.pointerId)) return; press(held.get(e.pointerId), false); held.delete(e.pointerId); };
+  document.addEventListener('pointerup', lift);
+  document.addEventListener('pointercancel', lift);
+
+  // Stick: where the thumb lands is the centre.
+  const zone = $('stickzone'), base = $('base'), knob = $('knob');
+  let stickId = null, cx0 = 0, cy0 = 0;
+  zone.addEventListener('pointerdown', (e) => {
+    if (stickId !== null) return;
+    e.preventDefault();
+    stickId = e.pointerId; zone.setPointerCapture(stickId);
+    const zr = zone.getBoundingClientRect();
+    base.style.left = (e.clientX - zr.left) + 'px'; base.style.top = (e.clientY - zr.top) + 'px';
+    cx0 = e.clientX; cy0 = e.clientY; moveStick(e);
+  }, { passive:false });
+  function moveStick(e) {
+    const r = base.getBoundingClientRect().width / 2;
+    let dx = (e.clientX - cx0) / r, dy = (e.clientY - cy0) / r;
+    const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
+    stickX = dx; stickY = -dy;
+    knob.style.transform = 'translate(calc(-50% + ' + dx * r + 'px), calc(-50% + ' + dy * r + 'px))';
+    send();
+  }
+  zone.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e); });
+  const endStick = (e) => {
+    if (e.pointerId !== stickId) return;
+    stickId = null; stickX = 0; stickY = 0;
+    knob.style.transform = 'translate(-50%,-50%)';
+    base.style.left = ''; base.style.top = '';
+    send();
+  };
+  zone.addEventListener('pointerup', endStick);
+  zone.addEventListener('pointercancel', endStick);
+
+  // ---- tilt ----
+  function screenAngle() { return (screen.orientation && screen.orientation.angle) || window.orientation || 0; }
+  // The wheel's turn from the device's orientation, for however the phone is held.
+  function turnOf(e) {
+    const a = ((screenAngle() % 360) + 360) % 360;
+    if (a === 90) return e.beta;
+    if (a === 270) return -e.beta;
+    return e.gamma;  // upright
+  }
+  window.addEventListener('deviceorientation', (e) => {
+    if (mode !== 'gyro' || e.beta == null) return;
+    const t = turnOf(e);
+    if (tiltZero === null) tiltZero = t;
+    let d = t - tiltZero;
+    if (d > 180) d -= 360; if (d < -180) d += 360;
+    tiltX = Math.max(-1, Math.min(1, d / 28));
+    $('wheelsvg').style.transform = 'rotate(' + (tiltX * 90) + 'deg)';
+    send();
+  });
+  async function setMode(m) {
+    if (m === 'gyro') {
+      if (!window.isSecureContext) { toast('Neigen geht nur über die Raum-Code-Seite (QR-Code am Bildschirm).', 3500); m = 'touch'; }
+      else if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+        try { if (await DeviceOrientationEvent.requestPermission() !== 'granted') m = 'touch'; } catch (_) { m = 'touch'; }
+      }
+    }
+    mode = m; store.set('steer', m); tiltZero = null; tiltX = 0;
+    document.body.classList.toggle('gyro', m === 'gyro');
+    $('m-touch').classList.toggle('on', m === 'touch');
+    $('m-gyro').classList.toggle('on', m === 'gyro');
+    send();
+  }
+  $('m-touch').onclick = () => setMode('touch');
+  $('m-gyro').onclick = () => setMode('gyro');
+  $('m-center').onclick = () => { tiltZero = null; toast('Zentriert'); };
+  $('menubtn').onclick = () => $('menu').classList.add('on');
+  $('m-close').onclick = () => $('menu').classList.remove('on');
+  $('m-port').onclick = () => { $('menu').classList.remove('on'); show('ports'); renderPorts(); };
+  $('m-full').onclick = () => { goFullscreen(); $('menu').classList.remove('on'); };
+  $('m-leave').onclick = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'leave' })); myPort = 0; wantPort = 0; store.set('port', '0'); $('menu').classList.remove('on'); show('ports'); };
+  document.body.classList.toggle('gyro', mode === 'gyro');
+  $('m-touch').classList.toggle('on', mode !== 'gyro');
+  $('m-gyro').classList.toggle('on', mode === 'gyro');
+
+  // ---- fullscreen, screen on ----
+  function goFullscreen() {
+    const d = document.documentElement;
+    if (d.requestFullscreen && !document.fullscreenElement) d.requestFullscreen({ navigationUI:'hide' }).then(() => {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    }).catch(() => {});
+  }
+  async function wake() { try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (_) {} }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
+
+  // ---- start ----
+  if (!HOSTED || room || direct) connect();
+  if (name && (!HOSTED || room || direct)) {
+    $('hello').textContent = name;
+    // Back on the same port after a reload or a lost connection.
+    wantPort = parseInt(store.get('port', '0'), 10) || 0;
+    show('ports');
+  } else show('join');
+  if (mode === 'gyro' && !window.isSecureContext) setMode('touch');
+})();
+</script>
+</body>
+</html>
