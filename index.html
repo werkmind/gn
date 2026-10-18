@@ -17,7 +17,7 @@
     /* the GameCube's indigo shell */
     --bg:#3b2f93; --shell:#4a3cb0; --shell-hi:#6253d0; --panel:rgba(0,0,0,.22); --line:rgba(255,255,255,.18); --fg:#f4f2ff; --muted:#c3bdf0;
     --a:#16a34a; --b:#e23b3b; --xy:#d8d8e0; --z:#6c5ce7; --grey:#bdbdc8;
-    --p1:#e0453a; --p2:#3a7be0; --p3:#2fbf55; --p4:#f0b429;
+    --p1:#ff5a5a; --p2:#006aff; --p3:#00ff00; --p4:#ffff00;
     /* the shorter side of the screen: everything on the pad scales with it */
     --s: min(100dvw, 100dvh);
   }
@@ -110,7 +110,10 @@
   .slider b { color:var(--fg); }
   .slider input { width:100%; accent-color:var(--a); touch-action:auto; }
   .field { display:flex; flex-direction:column; gap:4px; font-size:15px; color:var(--muted); }
-  .field input { padding:10px 12px; border-radius:10px; border:2px solid var(--line); background:var(--bg); color:var(--fg); font-size:17px; touch-action:auto; user-select:text; -webkit-user-select:text; }
+  .avrow { display:flex; gap:8px; align-items:center; }
+  .avrow select { flex:1; }
+  #m-avatar-img { width:48px; height:48px; border-radius:10px; background:#222; object-fit:cover; }
+  .field input, .field select { padding:10px 12px; border-radius:10px; border:2px solid var(--line); background:var(--bg); color:var(--fg); font-size:17px; touch-action:auto; user-select:text; -webkit-user-select:text; }
   #toast { position:absolute; left:50%; top:20%; transform:translateX(-50%); background:#000c; padding:12px 18px; border-radius:12px; display:none; z-index:6; text-align:center; max-width:90vw; }
 </style>
 </head>
@@ -167,6 +170,9 @@
       <h3>Name im Spiel</h3>
       <label class="field">Dein Name<input id="m-name" maxlength="16" autocomplete="nickname" enterkeyhint="done"></label>
       <label class="field">Teamname, wenn ihr zu zweit auf einem Kart fahrt<input id="m-team" maxlength="16" placeholder="leer: „A &amp; B“" enterkeyhint="done"></label>
+      <h3>Party</h3>
+      <div class="seg" id="m-mode"><button data-m="solo">Einzeln (1 pro Kart)</button><button data-m="team">Team (2 pro Kart)</button></div>
+      <label class="field"><span id="m-avatar-l">Dein Avatar</span><span class="avrow"><img id="m-avatar-img" alt="" hidden><select id="m-avatar"><option value="-1">– keiner –</option></select></span></label>
       <h3>Lenken</h3>
       <div class="seg"><button id="m-touch">Touch-Stick</button><button id="m-gyro">Neigen (Gyro)</button></div>
       <button class="ghost" id="m-center">Neigung neu zentrieren</button>
@@ -185,7 +191,11 @@
 <script>
 (() => {
   const BITS = { LEFT:0x0001, RIGHT:0x0002, DOWN:0x0004, UP:0x0008, Z:0x0010, R:0x0020, L:0x0040, A:0x0100, B:0x0200, X:0x0400, Y:0x0800, START:0x1000 };
+  // The game's player colours (Race2D::mPlayerNumberColor); a partner's is half way to white.
   const COLORS = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
+  const kartColor = (q) => q.partner ? 'color-mix(in srgb, ' + COLORS[q.kart - 1] + ' 50%, #fff)' : COLORS[q.kart - 1];
+  // P1-P8 the drivers of karts 1-8, P9-P16 their partners (as the game's markers).
+  const pnum = (q) => 'P' + (q.kart + (q.partner ? 8 : 0));
   const $ = (id) => document.getElementById(id);
   const store = {
     get(k, d) { try { const v = localStorage.getItem('gn.' + k); return v === null ? d : v; } catch (_) { return d; } },
@@ -254,7 +264,7 @@
     };
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      if (m.ports) { status = m; renderPorts(); return; }
+      if (m.ports) { status = m; renderPorts(); renderParty(); return; }
       if (m.t === 'port') { myPort = m.port; wantPort = m.port; store.set('port', String(myPort)); enterPad(); }
       else if (m.t === 'taken') { toast(portName(m.port) + ' ist schon belegt.'); wantPort = 0; show('ports'); }
       else if (m.t === 'kicked') { myPort = 0; wantPort = 0; toast('Du wurdest am Bildschirm abgemeldet.'); show('ports'); }
@@ -307,7 +317,7 @@
     return { inst: s && s.inst ? s.inst : Math.ceil(p / 4), kart: s && s.kart ? s.kart : (p - 1) % 4 + 1,
              partner: !!(s && s.role === 'partner'), multi, karts };
   }
-  const roleName = (q) => q.karts ? 'Kart ' + q.kart + ' · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler ' + q.kart;
+  const roleName = (q) => q.karts ? (q.multi ? '' : pnum(q) + ' · ') + 'Kart ' + q.kart + ' · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler ' + q.kart;
   const portName = (p) => { const q = portInfo(p); return (q.multi ? 'Fenster ' + q.inst + ' · ' : '') + roleName(q); };
   function renderPorts() {
     const grid = $('portgrid');
@@ -320,7 +330,7 @@
       for (let i = 1; i <= count; i++) {
         const q = portInfo(i);
         const b = document.createElement('button');
-        b.className = 'port' + (q.partner ? ' partner' : ''); b.style.setProperty('--c', COLORS[q.kart - 1]);
+        b.className = 'port' + (q.partner ? ' partner' : ''); b.style.setProperty('--c', kartColor(q));
         const win = (q.multi ? 'Fenster ' + q.inst : '') + (q.karts ? (q.multi ? ' · ' : '') + (q.partner ? 'Beifahrer' : 'Fahrer') : '');
         b.innerHTML = (win ? '<div class="win">' + win + '</div>' : '') + '<div class="n">' + (q.karts ? 'Kart ' : '') + q.kart + '</div><div class="who"></div>';
         b.onclick = () => take(i);
@@ -333,6 +343,7 @@
       const phone = p && p.phone;
       const mine = i === myPort;
       const desk = p && p.desktop && p.desktop.length ? p.desktop.join(' + ') : '';
+      b.hidden = !!(p && p.closed);  // a partner's place in Solo mode
       b.classList.toggle('mine', mine);
       b.classList.toggle('busy', !!phone && !mine);
       b.classList.toggle('free', !phone);
@@ -348,7 +359,7 @@
   // ---- pad ----
   function enterPad() {
     const q = portInfo(myPort);
-    $('pl').innerHTML = (q.multi ? q.inst + ' · ' : '') + (q.karts ? 'Kart <b>' + q.kart + '</b> · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler <b>' + q.kart + '</b>');
+    $('pl').innerHTML = (q.multi ? q.inst + ' · ' : '') + (q.karts ? (q.multi ? '' : '<b>' + pnum(q) + '</b> · ') + 'Kart ' + q.kart + ' · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler <b>' + q.kart + '</b>');
     document.documentElement.style.setProperty('--pc', COLORS[q.kart - 1]);
     $('menu').classList.remove('on');
     show('pad');
@@ -472,11 +483,48 @@
   $('sens').oninput = (e) => { sens = +e.target.value; store.set('sens', sens); showTuning(); };
   $('dz').oninput = (e) => { deadzone = +e.target.value; store.set('dz3', deadzone); showTuning(); };
   showTuning();
+  // The party, as the game's lobby has it: Solo or Team, and the avatars (a character's
+  // portrait, by its number in party.avatars; in Team mode the kart's).
+  function renderParty() {
+    const pt = status && status.party;
+    if (!pt) return;
+    const team = pt.mode === 'team';
+    for (const b of $('m-mode').children) {
+      b.classList.toggle('on', b.dataset.m === pt.mode);
+      b.disabled = b.dataset.m === 'team' && pt.modeLocked;
+    }
+    const sel = $('m-avatar');
+    if (sel.options.length !== pt.avatars.length + 1) {
+      sel.length = 1;
+      pt.avatars.forEach((a, i) => sel.add(new Option(a.name, String(i))));
+    }
+    const q = myPort ? portInfo(myPort) : null;
+    const cur = !q ? -1 : team ? (pt.teams[q.kart - 1] || {}).avatar : pt.slots[myPort - 1];
+    if (document.activeElement !== sel) sel.value = String(cur == null ? -1 : cur);
+    showAvatar(+sel.value);
+    $('m-avatar-l').textContent = team ? 'Euer Team-Avatar' : 'Dein Avatar';
+    sel.disabled = !myPort;
+  }
+  // The portrait comes from the game (GET /avatar/<n>.png); not there yet: no picture.
+  function showAvatar(n) {
+    const img = $('m-avatar-img');
+    if (!(n >= 0) || !server) { img.hidden = true; return; }
+    const src = server + '/avatar/' + n + '.png';
+    if (img.dataset.src === src) return;
+    img.dataset.src = src;
+    img.onload = () => { img.hidden = false; };
+    img.onerror = () => { img.hidden = true; img.dataset.src = ''; };
+    img.src = src;
+  }
+  function sendParty(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(Object.assign({ t:'party' }, o))); }
+  for (const b of $('m-mode').children) b.onclick = () => sendParty({ mode: b.dataset.m });
+  $('m-avatar').onchange = (e) => { sendParty({ avatar: +e.target.value }); showAvatar(+e.target.value); };
+
   // The names the game shows over the kart and in the results.
   function sendHello() { if (ws && ws.readyState === 1 && name) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId })); }
   $('m-name').onchange = (e) => { const n = e.target.value.trim().slice(0, 16); if (!n) { e.target.value = name; return; } name = n; store.set('name', name); $('hello').textContent = name; sendHello(); };
-  $('m-team').onchange = (e) => { team = e.target.value.trim().slice(0, 16); store.set('team', team); sendHello(); };
-  $('menubtn').onclick = () => { $('m-name').value = name; $('m-team').value = team; $('menu').classList.add('on'); };
+  $('m-team').onchange = (e) => { team = e.target.value.trim().slice(0, 16); store.set('team', team); sendHello(); sendParty({ team }); };
+  $('menubtn').onclick = () => { $('m-name').value = name; $('m-team').value = team; renderParty(); $('menu').classList.add('on'); };
   $('m-close').onclick = () => $('menu').classList.remove('on');
   $('m-port').onclick = () => { $('menu').classList.remove('on'); show('ports'); renderPorts(); };
   $('m-full').onclick = () => { goFullscreen(); $('menu').classList.remove('on'); };
