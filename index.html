@@ -14,14 +14,16 @@
 <title>Double Dash · Game Night</title>
 <style>
   :root {
-    --bg:#111; --panel:#1c1c1f; --line:#333; --fg:#f2f2f2; --muted:#9a9aa2;
-    --a:#2fbf55; --b:#e0453a; --xy:#d9d9de; --z:#7a5cff;
+    /* the GameCube's indigo shell */
+    --bg:#3b2f93; --shell:#4a3cb0; --shell-hi:#6253d0; --panel:rgba(0,0,0,.22); --line:rgba(255,255,255,.18); --fg:#f4f2ff; --muted:#c3bdf0;
+    --a:#16a34a; --b:#e23b3b; --xy:#d8d8e0; --z:#6c5ce7; --grey:#bdbdc8;
     --p1:#e0453a; --p2:#3a7be0; --p3:#2fbf55; --p4:#f0b429;
     /* the shorter side of the screen: everything on the pad scales with it */
     --s: min(100dvw, 100dvh);
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:600 16px/1.25 -apple-system, system-ui, sans-serif; overflow:hidden; overscroll-behavior:none; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:700 16px/1.25 "Arial Rounded MT Bold", ui-rounded, -apple-system, system-ui, sans-serif; overflow:hidden; overscroll-behavior:none; }
+  body { background:radial-gradient(120% 90% at 50% 0%, var(--shell-hi), var(--shell) 45%, var(--bg)); }
   body { position:fixed; inset:0; touch-action:none; }
   .screen { position:absolute; inset:0; display:none; padding:max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   .screen.on { display:flex; }
@@ -65,8 +67,10 @@
   /* pad */
   #pad { flex-direction:column; padding-top:max(8px, env(safe-area-inset-top)); }
   .top { display:flex; gap:10px; align-items:stretch; height:calc(var(--s) * .17); min-height:48px; }
-  .sh { flex:1; border-radius:14px; background:#38383d; display:flex; align-items:center; justify-content:center; font-size:calc(var(--s) * .07); }
-  .sh.down { background:#5c5c63; }
+  .sh { flex:1; border-radius:28px 28px 12px 12px; background:linear-gradient(#d4d4dc, #9d9daa); color:#3a3a48; display:flex; align-items:center; justify-content:center; font-size:calc(var(--s) * .07); box-shadow:inset 0 -4px 0 rgba(0,0,0,.18); }
+  .sh.down { background:linear-gradient(#a9a9b4, #84848f); box-shadow:none; }
+  .sh.z { flex:0 0 22%; border-radius:12px; background:linear-gradient(#8b7ff2, var(--z)); color:#fff; }
+  .sh.z.down { background:#5546c9; }
   .chip { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 14px; border-radius:14px; background:var(--panel); font-size:clamp(13px, 3.6vmin, 18px); }
   .chip .dot { width:12px; height:12px; border-radius:50%; background:#c33; }
   .chip .dot.on { background:var(--a); }
@@ -75,23 +79,21 @@
   .left, .right { flex:1; position:relative; min-width:0; }
   .right { container-type:size; }
   #stickzone { position:absolute; inset:0; touch-action:none; }
-  #base { position:absolute; width:min(calc(var(--s) * .52), 92%); aspect-ratio:1; border-radius:50%; border:3px solid #3a3a40; background:#1a1a1d; left:50%; top:55%; transform:translate(-50%,-50%); }
-  #knob { position:absolute; width:42%; height:42%; border-radius:50%; background:#6a6a72; left:50%; top:50%; transform:translate(-50%,-50%); }
-  #wheel { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--muted); font-size:clamp(13px, 3.4vmin, 17px); text-align:center; pointer-events:none; }
+  /* the control stick in its octagonal gate */
+  #base { position:absolute; width:min(calc(var(--s) * .52), 92%); aspect-ratio:1; left:50%; top:55%; transform:translate(-50%,-50%); background:#2a2170; clip-path:polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); overflow:visible; }
+  #gate { position:absolute; inset:0; pointer-events:none; }
+  #knob { position:absolute; width:46%; height:46%; border-radius:50%; background:radial-gradient(circle at 40% 35%, #f0f0f4, #b8b8c4 60%, #8e8e9c); box-shadow:0 0 0 4px rgba(0,0,0,.25), inset 0 0 0 6px rgba(0,0,0,.08); left:50%; top:50%; transform:translate(-50%,-50%); }
+  #wheel { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:var(--grey); font-size:clamp(13px, 3.4vmin, 17px); text-align:center; pointer-events:none; }
   #wheel svg { width:calc(var(--s) * .38); height:calc(var(--s) * .38); transition:transform .04s linear; }
   body.gyro #wheel { display:flex; }
   body.gyro #base { opacity:.18; }
   .cluster { position:absolute; right:0; bottom:0; width:min(100cqw, 100cqh, calc(var(--s) * .78)); aspect-ratio:1; }
   @media (orientation: portrait) { .cluster { width:min(100cqw, 100cqh); } }
-  .btn { position:absolute; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:calc(var(--s) * .07); color:#111; }
-  .btn.down { filter:brightness(1.35); transform:scale(.93); }
-  #A { background:var(--a); width:42%; height:42%; right:16%; bottom:14%; font-size:calc(var(--s) * .1); }
-  #B { background:var(--b); width:25%; height:25%; right:60%; bottom:4%; color:#fff; }
-  #X { background:var(--xy); width:21%; height:21%; right:0; bottom:56%; border-radius:38%; }
-  #Y { background:var(--xy); width:21%; height:21%; right:36%; bottom:62%; border-radius:38%; }
-  #Z { background:var(--z); color:#fff; width:26%; height:15%; right:0; bottom:84%; border-radius:12px; font-size:calc(var(--s) * .055); }
-  #S { background:#3e3e44; color:var(--fg); width:18%; height:18%; right:68%; bottom:72%; font-size:calc(var(--s) * .035); }
-  #S.down { background:#6a6a72; }
+  .cluster svg { width:100%; height:100%; overflow:visible; }
+  .cluster [data-b] { cursor:pointer; }
+  .cluster text { font:800 9px "Arial Rounded MT Bold", ui-rounded, system-ui, sans-serif; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .cluster .down { filter:brightness(1.3); }
+  .cluster #A.down circle, .cluster #B.down circle { transform-box:fill-box; transform-origin:center; transform:scale(.93); }
 
   /* menu */
   #menu { position:absolute; inset:0; background:rgba(0,0,0,.82); display:none; align-items:center; justify-content:center; z-index:5; padding:16px; }
@@ -102,28 +104,9 @@
   .seg button { flex:1; padding:10px; border-radius:9px; background:transparent; color:var(--muted); }
   .seg button.on { background:#3a3a40; color:var(--fg); }
   #menu .ghost { width:100%; text-align:left; }
-  /* how to play: alone or two on one kart */
-  .style { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
-  .style .seg { flex:0 0 auto; }
-  .partners { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:14px; }
-  .partners button { background:var(--panel); color:var(--fg); border:2px solid var(--line); border-radius:999px; padding:6px 12px; font-size:14px; }
-  .partners button.on { border-color:var(--a); background:#16301d; }
-  .partners .with { color:var(--a); }
-
-  /* the course vote */
-  #vote { position:absolute; inset:0; background:var(--bg); display:none; flex-direction:column; gap:10px; z-index:7; padding:max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); touch-action:auto; }
-  #vote.on { display:flex; }
-  #vote header { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-  #vote h2 { margin:0; font-size:clamp(18px, 5vmin, 26px); }
-  #vote .left { flex:0 0 auto; font-size:clamp(20px, 6vmin, 32px); color:var(--p4); font-variant-numeric:tabular-nums; }
-  #vote .sub { color:var(--muted); font-weight:500; font-size:14px; }
-  .cups { flex:1; min-height:0; display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; overflow:auto; }
-  @media (min-aspect-ratio: 3/2) { .cups { grid-template-columns:repeat(4, 1fr); } }
-  .cup { display:flex; flex-direction:column; gap:6px; }
-  .cup h4 { margin:0; font-size:13px; color:var(--muted); font-weight:600; }
-  .course { background:var(--panel); border:2px solid transparent; border-radius:12px; padding:8px 10px; text-align:left; font-size:clamp(13px, 3.4vmin, 16px); display:flex; justify-content:space-between; gap:6px; }
-  .course .n { color:var(--muted); font-variant-numeric:tabular-nums; }
-  .course.mine { border-color:var(--a); background:#16301d; }
+  .slider { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; font-size:15px; color:var(--muted); }
+  .slider b { color:var(--fg); }
+  .slider input { width:100%; accent-color:var(--a); touch-action:auto; }
   #toast { position:absolute; left:50%; top:20%; transform:translateX(-50%); background:#000c; padding:12px 18px; border-radius:12px; display:none; z-index:6; text-align:center; max-width:90vw; }
 </style>
 </head>
@@ -144,25 +127,14 @@
     <button class="ghost" id="rename">Name ändern</button>
   </header>
   <div class="conn" id="conn"></div>
-  <div class="style">
-    <div class="seg"><button id="st-solo">Allein</button><button id="st-team">Im Team</button></div>
-    <div class="partners" id="partners"></div>
-  </div>
   <div class="grid" id="portgrid"></div>
-</section>
-
-<section id="vote">
-  <header>
-    <div><h2>Welche Strecke?</h2><div class="sub" id="votesub">Jedes Kart hat eine Stimme.</div></div>
-    <div class="left" id="voteleft"></div>
-  </header>
-  <div class="cups" id="cups"></div>
 </section>
 
 <section class="screen" id="pad">
   <div class="top">
     <div class="sh" data-b="L">L</div>
     <button class="chip" id="menubtn"><span class="dot" id="dot"></span><span>Spieler <b id="pn">?</b></span><span>☰</span></button>
+    <div class="sh z" data-b="Z">Z</div>
     <div class="sh" data-b="R">R</div>
   </div>
   <div class="main">
@@ -175,12 +147,14 @@
     </div>
     <div class="right">
       <div class="cluster">
-        <div class="btn" id="Z" data-b="Z">Z</div>
-        <div class="btn" id="S" data-b="START">START</div>
-        <div class="btn" id="Y" data-b="Y">Y</div>
-        <div class="btn" id="X" data-b="X">X</div>
-        <div class="btn" id="B" data-b="B">B</div>
-        <div class="btn" id="A" data-b="A">A</div>
+        <!-- the GameCube's right side: big green A, red B, kidney-shaped X and Y -->
+        <svg viewBox="0 0 100 100">
+          <g id="S" data-b="START"><circle cx="12" cy="12" r="7" fill="#8f8fa0"/><circle cx="12" cy="12" r="11" fill="transparent"/><text x="12" y="24" fill="#c3bdf0" style="font-size:5px">START/PAUSE</text></g>
+          <g id="Y" data-b="Y"><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="32.3" y="36.6" fill="#55556a">Y</text></g>
+          <g id="X" data-b="X"><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="86" y="48" fill="#55556a">X</text></g>
+          <g id="B" data-b="B"><circle cx="24" cy="80" r="15" fill="transparent"/><circle cx="24" cy="80" r="11" fill="var(--b)"/><text x="24" y="80.5" fill="#fff">B</text></g>
+          <g id="A" data-b="A"><circle cx="56" cy="56" r="21" fill="var(--a)"/><text x="56" y="56.5" fill="#fff" style="font-size:15px">A</text></g>
+        </svg>
       </div>
     </div>
   </div>
@@ -189,6 +163,9 @@
       <h3>Lenken</h3>
       <div class="seg"><button id="m-touch">Touch-Stick</button><button id="m-gyro">Neigen (Gyro)</button></div>
       <button class="ghost" id="m-center">Neigung neu zentrieren</button>
+      <label class="slider">Volle Lenkung bei <b id="sensval"></b><input type="range" id="sens" min="6" max="45" step="1"></label>
+      <label class="slider">Totzone ausgleichen <b id="dzval"></b><input type="range" id="dz" min="0" max="45" step="1"></label>
+      <div class="slider">Lenkausschlag gerade <b id="tiltval">0 %</b></div>
       <button class="ghost" id="m-port">Spieler wechseln</button>
       <button class="ghost" id="m-full">Vollbild</button>
       <button class="ghost" id="m-leave">Aufhören</button>
@@ -215,16 +192,6 @@
   let status = null;
   let ws = null;
   let mode = store.get('steer', 'touch');
-  let myId = 0;              // our public player id, from the server
-  let style = store.get('style', 'solo'), partner = 0;
-  const CUPS = [
-    ['Pilz-Cup', ['Luigi Circuit', 'Peach Beach', 'Baby Park', 'Dry Dry Desert']],
-    ['Blumen-Cup', ['Mushroom Bridge', 'Mario Circuit', 'Daisy Cruiser', 'Waluigi Stadium']],
-    ['Stern-Cup', ['Sherbet Land', 'Mushroom City', 'Yoshi Circuit', 'DK Mountain']],
-    ['Spezial-Cup', ['Wario Colosseum', 'Dino Dino Jungle', 'Bowser\'s Castle', 'Rainbow Road']],
-  ];
-  const COURSES = CUPS.flatMap((c) => c[1]);
-  let lastWinner = -1;
   const state = { buttons:0 };
   let stickX = 0, stickY = 0, tiltX = 0, tiltZero = null;
 
@@ -279,8 +246,7 @@
     };
     ws.onmessage = (e) => {
       let m; try { m = JSON.parse(e.data); } catch (_) { return; }
-      if (m.ports) { status = m; renderPorts(); renderStyle(); renderVote(); return; }
-      if (m.t === 'me') { myId = m.id; sendPref(); return; }
+      if (m.ports) { status = m; renderPorts(); return; }
       if (m.t === 'port') { myPort = m.port; wantPort = m.port; store.set('port', String(myPort)); enterPad(); }
       else if (m.t === 'taken') { toast(portName(m.port) + ' ist schon belegt.'); wantPort = 0; show('ports'); }
       else if (m.t === 'kicked') { myPort = 0; wantPort = 0; toast('Du wurdest am Bildschirm abgemeldet.'); show('ports'); }
@@ -296,9 +262,9 @@
 
   // ---- join ----
   $('name').value = name;
-  if (HOSTED) { $('room').hidden = false; $('room').value = room; }
+  if (HOSTED && !direct) { $('room').hidden = false; $('room').value = room; }
   function join() {
-    if (HOSTED) {
+    if (HOSTED && !direct) {
       const r = $('room').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (r.length < 3) { $('room').focus(); return; }
       if (r !== room) { room = r; store.set('room', r); server = ''; if (ws) ws.close(); else connect(); }
@@ -356,66 +322,6 @@
     ws.send(JSON.stringify({ t:'take', port }));
   }
 
-  // ---- alone or in a team ----
-  function sendPref() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'pref', style, partner })); }
-  function setStyle(s) { style = s; if (s !== 'team') partner = 0; store.set('style', s); sendPref(); renderStyle(); }
-  $('st-solo').onclick = () => setStyle('solo');
-  $('st-team').onclick = () => setStyle('team');
-  function myKart() { return status && status.karts ? status.karts.find((k) => k.ids.includes(myId)) : null; }
-  function renderStyle() {
-    $('st-solo').classList.toggle('on', style !== 'team');
-    $('st-team').classList.toggle('on', style === 'team');
-    const el = $('partners');
-    el.innerHTML = '';
-    if (style !== 'team') return;
-    const kart = myKart();
-    if (kart && kart.ids.length === 2) {
-      const other = kart.names[kart.ids[0] === myId ? 1 : 0];
-      const s = document.createElement('span'); s.className = 'with'; s.textContent = 'Du fährst mit ' + other + '.';
-      el.appendChild(s);
-    } else el.appendChild(document.createTextNode('Mit wem?'));
-    const others = (status && status.players || []).filter((p) => p.id !== myId && p.style === 'team');
-    for (const p of [{ id:0, name:'Egal' }, ...others]) {
-      const b = document.createElement('button');
-      b.textContent = p.name + (p.partner === myId && p.id ? ' (will mit dir)' : '');
-      b.classList.toggle('on', partner === p.id);
-      b.onclick = () => { partner = p.id; sendPref(); renderStyle(); };
-      el.appendChild(b);
-    }
-    if (!others.length) el.appendChild(document.createTextNode('Noch niemand sonst will im Team fahren.'));
-  }
-
-  // ---- the course vote ----
-  function renderVote() {
-    const v = status && status.vote;
-    if (!v) return;
-    if (v.winner >= 0 && v.winner !== lastWinner && !v.active) toast('Gewählt: ' + COURSES[v.winner], 4000);
-    lastWinner = v.winner;
-    $('vote').classList.toggle('on', !!v.active && !!name);
-    if (!v.active) return;
-    const cups = $('cups');
-    if (!cups.children.length) {
-      CUPS.forEach(([cup, names], c) => {
-        const col = document.createElement('div'); col.className = 'cup';
-        col.innerHTML = '<h4>' + cup + '</h4>';
-        names.forEach((n, i) => {
-          const b = document.createElement('button'); b.className = 'course';
-          b.innerHTML = '<span></span><span class="n"></span>';
-          b.firstChild.textContent = n;
-          b.onclick = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t:'vote', course:c * 4 + i })); if (navigator.vibrate) navigator.vibrate(15); };
-          col.appendChild(b);
-        });
-        cups.appendChild(col);
-      });
-    }
-    const kart = myKart(), mine = kart ? kart.vote : -1;
-    const buttons = cups.querySelectorAll('.course');
-    buttons.forEach((b, i) => { b.classList.toggle('mine', i === mine); b.lastChild.textContent = v.tally[i] ? v.tally[i] : ''; });
-    $('voteleft').textContent = Math.ceil(v.remaining / 1000) + ' s';
-    $('votesub').textContent = !kart ? 'Du wartest noch auf einen Teampartner, deine Stimme zählt dann fürs Kart.'
-      : kart.ids.length === 2 ? 'Eine Stimme für euer Kart, die letzte von euch beiden zählt.' : 'Jedes Kart hat eine Stimme.';
-  }
-
   // ---- pad ----
   function enterPad() {
     $('pn').textContent = status && status.ports.length > 4 ? Math.ceil(myPort / 4) + '·' + ((myPort - 1) % 4 + 1) : myPort;
@@ -424,11 +330,20 @@
     show('pad');
     wake();
   }
+  // Like the runtime does for keyboards and gamepads (src/controls.cpp): the game takes
+  // PADClamp's 15 off and then steps in fours (KartGamePad), so steering starts at 19 from
+  // the centre and full lock is 75. Any movement at all starts at the first step. The
+  // start is set per phone in the menu (dead zone compensation), with the tilt for full lock.
+  let deadzone = +store.get('dz2', 19), sens = +store.get('sens', 18);
+  function axis(v, lo, hi) {
+    v = Math.max(-1, Math.min(1, v));
+    const a = Math.abs(v);
+    if (a < 0.004) return 128;
+    return Math.round(128 + Math.sign(v) * (lo + a * (hi - lo)));
+  }
   function packet() {
-    let sx = mode === 'gyro' ? tiltX : stickX;
-    const sy = stickY;
-    sx = Math.round(128 + Math.max(-1, Math.min(1, sx)) * 100);
-    const y = Math.round(128 + Math.max(-1, Math.min(1, sy)) * 100);
+    const sx = axis(mode === 'gyro' ? tiltX : stickX, deadzone, 75);
+    const y = axis(stickY, 33, 69);
     const l = (state.buttons & BITS.L) ? 255 : 0, r = (state.buttons & BITS.R) ? 255 : 0;
     return new Uint8Array([state.buttons & 255, state.buttons >> 8, sx, y, 128, 128, l, r]);
   }
@@ -504,7 +419,8 @@
     if (tiltZero === null) tiltZero = t;
     let d = t - tiltZero;
     if (d > 180) d -= 360; if (d < -180) d += 360;
-    tiltX = Math.max(-1, Math.min(1, d / 28));
+    tiltX = Math.max(-1, Math.min(1, d / sens));
+    $('tiltval').textContent = Math.round(tiltX * 100) + ' %';
     $('wheelsvg').style.transform = 'rotate(' + (tiltX * 90) + 'deg)';
     send();
   });
@@ -524,6 +440,13 @@
   $('m-touch').onclick = () => setMode('touch');
   $('m-gyro').onclick = () => setMode('gyro');
   $('m-center').onclick = () => { tiltZero = null; toast('Zentriert'); };
+  function showTuning() {
+    $('sens').value = sens; $('sensval').textContent = sens + '° Neigung';
+    $('dz').value = deadzone; $('dzval').textContent = deadzone ? deadzone + ' (Standard 19)' : 'aus';
+  }
+  $('sens').oninput = (e) => { sens = +e.target.value; store.set('sens', sens); showTuning(); };
+  $('dz').oninput = (e) => { deadzone = +e.target.value; store.set('dz2', deadzone); showTuning(); };
+  showTuning();
   $('menubtn').onclick = () => $('menu').classList.add('on');
   $('m-close').onclick = () => $('menu').classList.remove('on');
   $('m-port').onclick = () => { $('menu').classList.remove('on'); show('ports'); renderPorts(); };
