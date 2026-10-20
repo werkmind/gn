@@ -226,56 +226,114 @@
   // ?s=<address> skips the lookup and goes straight to a game (for testing, or a fixed setup).
   const direct = /^https?:\/\/[\w.:-]+$/.test(params.get('s') || '') ? params.get('s') : '';
   let server = direct || (HOSTED ? '' : location.origin);
-  let fails = 0;
+  let fails = 0;             // failed connections to this address since the last lookup
+  let misses = 0;            // lookups in a row that found nothing to connect to
+  let dead = '';             // an address the room still names, though it did not answer
+  let gen = 0;               // bumped by restart(): answers to older attempts are dropped
+  let retry = 0;
   function setConn(t, bad) { const el = $('conn'); el.textContent = t || ''; el.classList.toggle('bad', !!bad); }
+  // Everything that waits on the network gives up after a while: iOS freezes requests when the
+  // home screen app goes to the background, and a frozen one must not hold up the page.
+  async function fetchWithin(url, ms) {
+    const ctl = window.AbortController ? new AbortController() : null;
+    const t = setTimeout(() => ctl && ctl.abort(), ms);
+    try {
+      return await Promise.race([fetch(url, { cache:'no-store', signal: ctl ? ctl.signal : undefined }),
+                                 new Promise((_, no) => setTimeout(() => no(new Error('timeout')), ms + 500))]);
+    } finally { clearTimeout(t); }
+  }
   async function lookup() {
     if (!room) return false;
-    setConn('Suche Raum ' + room + ' …');
+    if (!dead) setConn('Suche Raum ' + room + ' …');
     try {
-      const r = await fetch('https://ntfy.sh/mkdd-gn-' + room.toLowerCase() + '/json?poll=1&since=12h', { cache:'no-store' });
+      const r = await fetchWithin('https://ntfy.sh/mkdd-gn-' + room.toLowerCase() + '/json?poll=1&since=12h', 8000);
+      if (!r.ok) { setConn('Raum-Suche gerade überlastet, gleich nochmal …', true); return false; }
       let url = '';
       for (const line of (await r.text()).split('\n')) {
         try { const m = JSON.parse(line); if (m.event === 'message') { const u = JSON.parse(m.message).url; if (/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(u)) url = u; } } catch (_) {}
       }
-      if (!url) { setConn('Raum ' + room + ' gibt es gerade nicht. Läuft das Spiel?', true); return false; }
+      if (!url) { setConn('Raum ' + room + ' gibt es gerade nicht. Code richtig? Läuft das Spiel?', true); return false; }
+      if (url === dead) { setConn('Raum ' + room + ': das Spiel antwortet nicht. Läuft es noch? Versuche es weiter …', true); }
       server = url;
       return true;
-    } catch (_) { setConn('Keine Verbindung zum Internet?', true); return false; }
+    } catch (_) { setConn('Raum ' + room + ' nicht erreichbar. Internet da? Versuche es weiter …', true); return false; }
   }
 
   // ---- connection ----
   let connecting = false;
-  async function connect() {
-    if (connecting) return;
-    connecting = true;
-    if (HOSTED && !direct && (!server || fails >= 3)) {
-      fails = 0;
-      if (!(await lookup())) { connecting = false; setTimeout(connect, 4000); return; }
-    }
+  function later(ms) { clearTimeout(retry); retry = setTimeout(connect, ms); }
+  function drop(s) {
+    if (ws !== s) return;
+    ws = null;
+    s.onopen = s.onclose = s.onerror = s.onmessage = null;
+    try { s.close(); } catch (_) {}
+    $('dot').classList.remove('on');
+    fails++;
+    if (fails >= 3 && HOSTED && !direct) dead = server;
+    if (fails >= 2 && !dead) setConn('Verbindung weg, versuche es wieder …', true);
+    later(800);
+  }
+  // A clean start: a new code was typed (or the same one again), or the page is back in front.
+  function restart(fresh) {
+    gen++;
+    clearTimeout(retry);
     connecting = false;
+    if (ws) { const s = ws; ws = null; s.onopen = s.onclose = s.onerror = s.onmessage = null; try { s.close(); } catch (_) {} }
+    $('dot').classList.remove('on');
+    if (fresh && HOSTED && !direct) { server = ''; dead = ''; misses = 0; }
+    fails = 0;
+    connect();
+  }
+  async function connect() {
+    clearTimeout(retry);
+    if (connecting || ws) return;
+    const g = gen;
+    if (HOSTED && !direct && (!server || fails >= 3)) {
+      connecting = true;
+      const ok = await lookup();
+      if (g !== gen) return;
+      connecting = false;
+      // Gently: several phones behind one router share ntfy's limit with the game.
+      if (!ok) { misses++; later(Math.min(15000, 2000 + 1500 * misses)); return; }
+      misses = 0;
+      fails = 0;
+      // The room still names an address that did not answer: wait a little before trying it again.
+      if (server === dead) { later(5000); dead = ''; fails = 2; return; }
+    }
     if (!server) return;
-    ws = new WebSocket(server.replace(/^http/, 'ws') + '/ws');
-    ws.binaryType = 'arraybuffer';
-    ws.onopen = () => {
-      fails = 0; setConn('');
+    let s;
+    try { s = new WebSocket(server.replace(/^http/, 'ws') + '/ws'); } catch (_) { fails = 3; later(2000); return; }
+    ws = s;
+    s.binaryType = 'arraybuffer';
+    const opening = setTimeout(() => { if (s.readyState !== 1) drop(s); }, 8000);
+    // Is the game still there? A ping every 3 s; once the game has answered one (older games
+    // do not), 8 s without a word from it count as a lost connection.
+    let heard = Date.now(), pongs = false;
+    const alive = setInterval(() => {
+      if (ws !== s) { clearInterval(alive); return; }
+      if (s.readyState !== 1) return;
+      if (pongs && Date.now() - heard > 8000) { clearInterval(alive); drop(s); return; }
+      try { s.send('{"t":"ping"}'); } catch (_) {}
+    }, 3000);
+    s.onopen = () => {
+      clearTimeout(opening);
+      fails = 0; dead = ''; setConn('');
       $('dot').classList.add('on');
-      if (name) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId }));
-      if (name && wantPort) ws.send(JSON.stringify({ t:'take', port:wantPort }));
+      if (name) s.send(JSON.stringify({ t:'hello', name, team, id:clientId }));
+      if (name && wantPort) s.send(JSON.stringify({ t:'take', port:wantPort }));
     };
-    ws.onmessage = (e) => {
+    s.onmessage = (e) => {
+      heard = Date.now();
       let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.t === 'pong') { pongs = true; return; }
       if (m.ports) { status = m; renderPorts(); renderParty(); return; }
       if (m.t === 'port') { myPort = m.port; wantPort = m.port; store.set('port', String(myPort)); enterPad(); }
       else if (m.t === 'taken') { toast(portName(m.port) + ' ist schon belegt.'); wantPort = 0; show('ports'); }
       else if (m.t === 'kicked') { myPort = 0; wantPort = 0; toast('Du wurdest am Bildschirm abgemeldet.'); show('ports'); }
       else if (m.t === 'rumble' && navigator.vibrate) navigator.vibrate(m.on ? 2000 : 0);
     };
-    ws.onclose = () => {
-      $('dot').classList.remove('on');
-      fails++;
-      if (fails >= 2) setConn('Verbindung weg, versuche es wieder …', true);
-      setTimeout(connect, 800);
-    };
+    s.onerror = () => { clearTimeout(opening); clearInterval(alive); drop(s); };
+    s.onclose = () => { clearTimeout(opening); clearInterval(alive); drop(s); };
   }
 
   // ---- join ----
@@ -285,7 +343,8 @@
     if (HOSTED && !direct) {
       const r = $('room').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (r.length < 3) { $('room').focus(); return; }
-      if (r !== room) { room = r; store.set('room', r); server = ''; if (ws) ws.close(); else connect(); }
+      // Typed again: a new code, or the same one while not connected, starts a fresh search.
+      if (r !== room || !(ws && ws.readyState === 1)) { room = r; store.set('room', r); restart(true); }
     }
     const n = $('name').value.trim();
     if (!n) { $('name').focus(); return; }
@@ -299,6 +358,7 @@
   $('go').onclick = join;
   $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
   $('room').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('name').focus(); });
+  if (HOSTED && !direct) $('rename').textContent = 'Name / Code ändern';
   $('rename').onclick = () => { show('join'); $('name').focus(); };
 
   const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
@@ -541,10 +601,45 @@
     }).catch(() => {});
   }
   async function wake() { try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (_) {} }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
+  // Back in front after a while (the home screen app, the phone locked mid-race): the game let
+  // go of the place meanwhile and requests may hang, so connect anew, to the room's current address.
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') { hiddenAt = Date.now(); return; }
+    wake();
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (away > 3000 || !(ws && ws.readyState === 1)) { restart(false); checkUpdate(); }
+  });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) restart(false); });
+  window.addEventListener('online', () => { if (!(ws && ws.readyState === 1)) restart(false); });
+
+  // ---- a newer join page ----
+  // Home screen apps keep a page for a long time. The hosted page compares its build with the
+  // one online and loads the new one, though never mid-race; service workers of older pages go.
+  const BUILD = 'e06c3ef-20261020164920';
+  async function checkUpdate() {
+    if (!HOSTED || BUILD === 'dev') return;
+    try {
+      const r = await fetchWithin(location.pathname + '?b=' + Date.now(), 8000);
+      const m = /const BUILD = '([^']+)'/.exec(await r.text());
+      if (!m || m[1] === BUILD || m[1] === 'dev') return;
+      if (document.querySelector('.screen.on') && document.querySelector('.screen.on').id === 'pad' && myPort) return;
+      if (Date.now() - (+store.get('reloaded', '0')) < 60000) return;
+      store.set('reloaded', String(Date.now()));
+      // A new address, so no cache answers with the old page.
+      const q = new URLSearchParams(location.search);
+      q.set('v', m[1]);
+      location.replace(location.pathname + '?' + q.toString());
+    } catch (_) {}
+  }
+  if (HOSTED && navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+
 
   // ---- start ----
   if (!HOSTED || room || direct) connect();
+  checkUpdate();
   if (name && (!HOSTED || room || direct)) {
     $('hello').textContent = name;
     // Back on the same port after a reload or a lost connection.
