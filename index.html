@@ -79,7 +79,22 @@
   .chip b { color:var(--pc); }
   .main { flex:1; display:flex; min-height:0; gap:10px; margin-top:10px; }
   .left, .right { flex:1; position:relative; min-width:0; }
-  .right { container-type:size; }
+  /* right: the drift button (R, held) beside the GameCube's buttons; in portrait above them */
+  .right { container-type:size; display:flex; gap:10px; align-items:flex-end; }
+  @media (orientation: portrait) { .right { flex-direction:column; align-items:stretch; } }
+  .drift { flex:1; align-self:stretch; min-width:0; min-height:0; border-radius:26px; background:linear-gradient(#d4d4dc, #9d9daa); color:#3a3a48; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; box-shadow:inset 0 -5px 0 rgba(0,0,0,.18); }
+  .drift b { font-size:calc(var(--s) * .14); line-height:1; }
+  .drift span, .litem span { font-size:clamp(11px, 3.2vmin, 16px); letter-spacing:.06em; }
+  .drift.down { background:linear-gradient(#a9a9b4, #84848f); box-shadow:none; }
+  /* the item button on the steering side: let go of the stick a moment, tap, steer on */
+  .litem { position:absolute; left:0; top:0; z-index:2; width:min(46%, calc(var(--s) * .3)); height:calc(var(--s) * .22); border-radius:14px 40px 40px 40px; background:var(--xy); color:#55556a; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:inset 0 -4px 0 rgba(0,0,0,.15); }
+  .litem b { font-size:calc(var(--s) * .08); line-height:1; }
+  .litem.down { filter:brightness(1.25); }
+  body.noleft .litem { display:none; }
+  .cluster .cap { font-size:4.6px; font-weight:800; letter-spacing:.04em; }
+  /* auto-gas while racing: A glows */
+  .cluster #A.auto circle { stroke:#b9ffcf; stroke-width:2.5; }
+  #hap { position:fixed; left:-50px; top:0; opacity:0; pointer-events:none; }
   #stickzone { position:absolute; inset:0; touch-action:none; }
   /* the control stick in its octagonal gate */
   #base { position:absolute; width:min(calc(var(--s) * .52), 92%); aspect-ratio:1; left:50%; top:55%; transform:translate(-50%,-50%); background:#2a2170; clip-path:polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); overflow:visible; }
@@ -89,8 +104,8 @@
   #wheel svg { width:calc(var(--s) * .38); height:calc(var(--s) * .38); transition:transform .04s linear; }
   body.gyro #wheel { display:flex; }
   body.gyro #base { opacity:.18; }
-  .cluster { position:absolute; right:0; bottom:0; width:min(100cqw, 100cqh, calc(var(--s) * .78)); aspect-ratio:1; }
-  @media (orientation: portrait) { .cluster { width:min(100cqw, 100cqh); } }
+  .cluster { position:relative; flex:0 0 auto; width:min(64cqw, 100cqh, calc(var(--s) * .78)); aspect-ratio:1; }
+  @media (orientation: portrait) { .cluster { width:min(100cqw, 64cqh); align-self:flex-end; } }
   .cluster svg { width:100%; height:100%; overflow:visible; }
   .cluster [data-b] { cursor:pointer; }
   .cluster text { font:800 9px "Arial Rounded MT Bold", ui-rounded, system-ui, sans-serif; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
@@ -147,20 +162,22 @@
   <div class="main">
     <div class="left">
       <div id="stickzone"><div id="base"><div id="knob"></div></div></div>
+      <div class="litem" data-b="X"><b>X</b><span>ITEM</span></div>
       <div id="wheel">
         <svg viewBox="0 0 100 100" id="wheelsvg" fill="none" stroke="currentColor" stroke-width="7"><circle cx="50" cy="50" r="42"/><circle cx="50" cy="50" r="9" fill="currentColor"/><path d="M8 50h33M59 50h33M50 59v33"/></svg>
         <div>Handy neigen zum Lenken</div>
       </div>
     </div>
     <div class="right">
+      <div class="drift" data-b="R" data-hold><b>R</b><span id="driftcap">DRIFT</span></div>
       <div class="cluster">
         <!-- the GameCube's right side: big green A, red B, kidney-shaped X and Y -->
         <svg viewBox="0 0 100 100">
-          <g id="S" data-b="START"><circle cx="12" cy="12" r="7" fill="#8f8fa0"/><circle cx="12" cy="12" r="11" fill="transparent"/><text x="12" y="24" fill="#c3bdf0" style="font-size:5px">START/PAUSE</text></g>
-          <g id="Y" data-b="Y"><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="32.3" y="36.6" fill="#55556a">Y</text></g>
-          <g id="X" data-b="X"><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="86" y="48" fill="#55556a">X</text></g>
-          <g id="B" data-b="B"><circle cx="24" cy="80" r="15" fill="transparent"/><circle cx="24" cy="80" r="11" fill="var(--b)"/><text x="24" y="80.5" fill="#fff">B</text></g>
-          <g id="A" data-b="A"><circle cx="56" cy="56" r="21" fill="var(--a)"/><text x="56" y="56.5" fill="#fff" style="font-size:15px">A</text></g>
+          <g id="S" data-b="START"><circle cx="12" cy="12" r="7" fill="#8f8fa0"/><circle cx="12" cy="12" r="11" fill="transparent"/><text x="17" y="24" fill="#c3bdf0" style="font-size:5px">START/PAUSE</text></g>
+          <g id="Y" data-b="Y"><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M25.5 50.6 A31 31 0 0 1 45.4 26.9" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="32.3" y="36.6" fill="#55556a">Y</text><text class="cap" x="12" y="47" fill="#c3bdf0">ITEM</text></g>
+          <g id="X" data-b="X"><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="transparent" stroke-width="22" stroke-linecap="round"/><path d="M73.8 30.6 A31 31 0 0 1 84.1 69.1" fill="none" stroke="var(--xy)" stroke-width="12" stroke-linecap="round"/><text x="86" y="48" fill="#55556a">X</text><text class="cap" x="86" y="22" fill="#c3bdf0">ITEM</text></g>
+          <g id="B" data-b="B"><circle cx="24" cy="80" r="15" fill="transparent"/><circle cx="24" cy="80" r="11" fill="var(--b)"/><text x="24" y="80.5" fill="#fff">B</text><text class="cap" id="bcap" x="24" y="98" fill="#c3bdf0">BREMSE</text></g>
+          <g id="A" data-b="A"><circle cx="56" cy="56" r="21" fill="var(--a)"/><text x="56" y="54" fill="#fff" style="font-size:15px">A</text><text class="cap" id="acap" x="56" y="66" fill="#eafff0">GAS</text></g>
         </svg>
       </div>
     </div>
@@ -173,6 +190,11 @@
       <h3>Party</h3>
       <div class="seg" id="m-mode"><button data-m="solo">Einzeln (1 pro Kart)</button><button data-m="team">Team (2 pro Kart)</button></div>
       <label class="field"><span id="m-avatar-l">Dein Avatar</span><span class="avrow"><img id="m-avatar-img" alt="" hidden><select id="m-avatar"><option value="-1">– keiner –</option></select></span></label>
+      <h3>Fahren</h3>
+      <div class="field">Gas<div class="seg" id="m-gas"><button data-v="auto">Automatisch</button><button data-v="manual">Selbst (A halten)</button></div></div>
+      <div class="field">Driften<div class="seg" id="m-drift"><button data-v="button">R-Taste halten</button><button data-v="auto">Auto bei vollem Lenken</button></div></div>
+      <div class="field">Item-Taste links beim Lenken<div class="seg" id="m-left"><button data-v="on">Ja</button><button data-v="off">Nein</button></div></div>
+      <div class="hint" id="gasnote"></div>
       <h3>Lenken</h3>
       <div class="seg"><button id="m-touch">Touch-Stick</button><button id="m-gyro">Neigen (Gyro)</button></div>
       <button class="ghost" id="m-center">Neigung neu zentrieren</button>
@@ -187,6 +209,7 @@
   </div>
 </section>
 <div id="toast"></div>
+<label id="hap" aria-hidden="true"><input type="checkbox" switch tabindex="-1"></label>
 
 <script>
 (() => {
@@ -210,6 +233,15 @@
   let status = null;
   let ws = null;
   let mode = store.get('steer', 'touch');
+  // Made for people who never held a GameCube pad: the game gives gas by itself while racing
+  // (the right thumb is free for drift and items), drifting is one big button or automatic,
+  // and the item is also on the steering side, since a steering thumb lets go easier.
+  let gas = store.get('gas', 'auto');          // 'auto' | 'manual'
+  let driftMode = store.get('drift', 'button'); // 'button' | 'auto'
+  let leftItem = store.get('litem', 'on');      // 'on' | 'off'
+  let gasAck = false;        // the game knows auto-gas (older games do not answer)
+  let racing = false;        // the game says a race is on
+  let autoR = false, fullSince = 0;
   const state = { buttons:0 };
   let stickX = 0, stickY = 0, tiltX = 0, tiltZero = null;
 
@@ -321,6 +353,8 @@
       $('dot').classList.add('on');
       if (name) s.send(JSON.stringify({ t:'hello', name, team, id:clientId }));
       if (name && wantPort) s.send(JSON.stringify({ t:'take', port:wantPort }));
+      gasAck = false; racing = false;
+      sendOpts(s);
     };
     s.onmessage = (e) => {
       heard = Date.now();
@@ -331,6 +365,8 @@
       else if (m.t === 'taken') { toast(portName(m.port) + ' ist schon belegt.'); wantPort = 0; show('ports'); }
       else if (m.t === 'kicked') { myPort = 0; wantPort = 0; toast('Du wurdest am Bildschirm abgemeldet.'); show('ports'); }
       else if (m.t === 'rumble' && navigator.vibrate) navigator.vibrate(m.on ? 2000 : 0);
+      else if (m.t === 'opts') { gasAck = true; if ('racing' in m) racing = !!m.racing; showDrive(); }
+      else if (m.t === 'race') { racing = !!m.on; autoR = false; showDrive(); }
     };
     s.onerror = () => { clearTimeout(opening); clearInterval(alive); drop(s); };
     s.onclose = () => { clearTimeout(opening); clearInterval(alive); drop(s); };
@@ -421,8 +457,19 @@
     const q = portInfo(myPort);
     $('pl').innerHTML = (q.multi ? q.inst + ' · ' : '') + (q.karts ? (q.multi ? '' : '<b>' + pnum(q) + '</b> · ') + 'Kart ' + q.kart + ' · ' + (q.partner ? 'Beifahrer' : 'Fahrer') : 'Spieler <b>' + q.kart + '</b>');
     document.documentElement.style.setProperty('--pc', COLORS[q.kart - 1]);
+    // The co-op partner: A, B, X and Y all throw the item, L and R ram, nobody gives gas.
+    document.body.classList.toggle('partner', q.partner);
+    $('driftcap').textContent = q.partner ? 'RAMMEN' : 'DRIFT';
+    $('acap').textContent = q.partner ? 'ITEM' : 'GAS';
+    $('bcap').textContent = q.partner ? 'ITEM' : 'BREMSE';
+    showDrive();
     $('menu').classList.remove('on');
     show('pad');
+    if (!q.partner && store.get('tipped', '') !== '2') {
+      store.set('tipped', '2');
+      toast(gas === 'auto' ? 'Gas gibt das Spiel im Rennen von selbst. Rechts R halten = Driften, X = Item (auch links oben). B = Bremse.'
+                           : 'A = Gas, R halten = Driften, X = Item (auch links oben), B = Bremse.', 6000);
+    }
     wake();
   }
   // Like the runtime does for keyboards and gamepads (src/controls.cpp): the game takes
@@ -440,35 +487,69 @@
   function packet() {
     const sx = axis(mode === 'gyro' ? tiltX : stickX, deadzone, 75);
     const y = axis(stickY, 33, 69);
-    const l = (state.buttons & BITS.L) ? 255 : 0, r = (state.buttons & BITS.R) ? 255 : 0;
-    return new Uint8Array([state.buttons & 255, state.buttons >> 8, sx, y, 128, 128, l, r]);
+    let buttons = state.buttons;
+    // Automatic drift: steered all the way for a moment while racing holds R, until the
+    // stick comes back towards the middle.
+    if (driftMode === 'auto' && racing && !document.body.classList.contains('partner')) {
+      const ax = Math.abs(mode === 'gyro' ? tiltX : stickX), now = Date.now();
+      if (ax < 0.85) fullSince = 0; else if (!fullSince) fullSince = now;
+      if (!autoR && fullSince && now - fullSince > 180) autoR = true;
+      if (autoR && ax < 0.4) autoR = false;
+      if (autoR) buttons |= BITS.R;
+    } else autoR = false;
+    const l = (buttons & BITS.L) ? 255 : 0, r = (buttons & BITS.R) ? 255 : 0;
+    return new Uint8Array([buttons & 255, buttons >> 8, sx, y, 128, 128, l, r]);
   }
   function send() { if (ws && ws.readyState === 1 && myPort) ws.send(packet()); }
   setInterval(send, 33);
 
-  const counts = {}, held = new Map();
+  const counts = {}, held = new Map(), sticky = new Set();
   function press(b, down) {
     counts[b] = (counts[b] || 0) + (down ? 1 : -1);
     const on = counts[b] > 0;
     for (const el of document.querySelectorAll('[data-b="' + b + '"]')) el.classList.toggle('down', on);
     if (on) state.buttons |= BITS[b]; else state.buttons &= ~BITS[b];
-    if (down && navigator.vibrate) navigator.vibrate(8);
+    if (down) buzz();
     send();
+  }
+  // A short tick under the thumb: vibrate where there is one (Android); on iPhones (iOS 18 and
+  // later) a switch toggled through its label ticks the Taptic Engine, nothing happens elsewhere.
+  const hap = $('hap');
+  function buzz() {
+    if (navigator.vibrate) { navigator.vibrate(10); return; }
+    try { hap.click(); } catch (_) {}
   }
   const buttonAt = (x, y) => { const el = document.elementFromPoint(x, y); const b = el && el.closest('[data-b]'); return b ? b.dataset.b : null; };
   $('pad').addEventListener('pointerdown', (e) => {
     if (e.target.closest('#stickzone') || e.target.closest('#menu') || e.target.closest('#menubtn')) return;
     const b = buttonAt(e.clientX, e.clientY); if (!b) return;
     e.preventDefault(); held.set(e.pointerId, b); press(b, true);
+    if (e.target.closest('[data-hold]')) sticky.add(e.pointerId);
   }, { passive:false });
   document.addEventListener('pointermove', (e) => {
     if (!held.has(e.pointerId)) return;
     const now = buttonAt(e.clientX, e.clientY), was = held.get(e.pointerId);
+    // A held drift stays held, wherever the thumb slips to.
+    if (was === 'R' && sticky.has(e.pointerId)) return;
     if (now && now !== was) { press(was, false); press(now, true); held.set(e.pointerId, now); }
   });
-  const lift = (e) => { if (!held.has(e.pointerId)) return; press(held.get(e.pointerId), false); held.delete(e.pointerId); };
+  const lift = (e) => { sticky.delete(e.pointerId); if (!held.has(e.pointerId)) return; press(held.get(e.pointerId), false); held.delete(e.pointerId); };
   document.addEventListener('pointerup', lift);
   document.addEventListener('pointercancel', lift);
+
+  // Hardware keys, where the browser hands them over at all (some Android browsers do for the
+  // volume keys; Safari on the iPhone never does): volume up the item, volume down drift.
+  const KEYS = { AudioVolumeUp:'X', VolumeUp:'X', AudioVolumeDown:'R', VolumeDown:'R' };
+  const keysDown = new Set();
+  document.addEventListener('keydown', (e) => {
+    const b = KEYS[e.key]; if (!b || !myPort) return;
+    e.preventDefault();
+    if (!keysDown.has(e.key)) { keysDown.add(e.key); press(b, true); }
+  });
+  document.addEventListener('keyup', (e) => {
+    const b = KEYS[e.key]; if (!b || !keysDown.has(e.key)) return;
+    e.preventDefault(); keysDown.delete(e.key); press(b, false);
+  });
 
   // Stick: where the thumb lands is the centre.
   const zone = $('stickzone'), base = $('base'), knob = $('knob');
@@ -580,11 +661,28 @@
   for (const b of $('m-mode').children) b.onclick = () => sendParty({ mode: b.dataset.m });
   $('m-avatar').onchange = (e) => { sendParty({ avatar: +e.target.value }); showAvatar(+e.target.value); };
 
+  // Gas, drift, the item button on the left.
+  function sendOpts(s) { s = s || ws; if (s && s.readyState === 1) s.send(JSON.stringify({ t:'opts', gas })); }
+  function showDrive() {
+    for (const b of $('m-gas').children) b.classList.toggle('on', b.dataset.v === gas);
+    for (const b of $('m-drift').children) b.classList.toggle('on', b.dataset.v === driftMode);
+    for (const b of $('m-left').children) b.classList.toggle('on', b.dataset.v === leftItem);
+    document.body.classList.toggle('noleft', leftItem === 'off');
+    const partner = document.body.classList.contains('partner');
+    $('A').classList.toggle('auto', gas === 'auto' && gasAck && racing && !partner);
+    $('gasnote').textContent = gas === 'auto' && !gasAck && ws && ws.readyState === 1
+      ? 'Diese Spielversion gibt noch kein Auto-Gas: bitte A halten.' : '';
+  }
+  for (const b of $('m-gas').children) b.onclick = () => { gas = b.dataset.v; store.set('gas', gas); sendOpts(); showDrive(); };
+  for (const b of $('m-drift').children) b.onclick = () => { driftMode = b.dataset.v; store.set('drift', driftMode); showDrive(); };
+  for (const b of $('m-left').children) b.onclick = () => { leftItem = b.dataset.v; store.set('litem', leftItem); showDrive(); };
+  showDrive();
+
   // The names the game shows over the kart and in the results.
   function sendHello() { if (ws && ws.readyState === 1 && name) ws.send(JSON.stringify({ t:'hello', name, team, id:clientId })); }
   $('m-name').onchange = (e) => { const n = e.target.value.trim().slice(0, 16); if (!n) { e.target.value = name; return; } name = n; store.set('name', name); $('hello').textContent = name; sendHello(); };
   $('m-team').onchange = (e) => { team = e.target.value.trim().slice(0, 16); store.set('team', team); sendHello(); sendParty({ team }); };
-  $('menubtn').onclick = () => { $('m-name').value = name; $('m-team').value = team; renderParty(); $('menu').classList.add('on'); };
+  $('menubtn').onclick = () => { $('m-name').value = name; $('m-team').value = team; renderParty(); showDrive(); $('menu').classList.add('on'); };
   $('m-close').onclick = () => $('menu').classList.remove('on');
   $('m-port').onclick = () => { $('menu').classList.remove('on'); show('ports'); renderPorts(); };
   $('m-full').onclick = () => { goFullscreen(); $('menu').classList.remove('on'); };
@@ -617,7 +715,7 @@
   // ---- a newer join page ----
   // Home screen apps keep a page for a long time. The hosted page compares its build with the
   // one online and loads the new one, though never mid-race; service workers of older pages go.
-  const BUILD = 'e06c3ef-20261020164920';
+  const BUILD = '28dad7f-20261023101122';
   async function checkUpdate() {
     if (!HOSTED || BUILD === 'dev') return;
     try {
