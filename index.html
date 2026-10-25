@@ -125,6 +125,7 @@
   .slider b { color:var(--fg); }
   .slider input { width:100%; accent-color:var(--a); touch-action:auto; }
   .field { display:flex; flex-direction:column; gap:4px; font-size:15px; color:var(--muted); }
+  .field[hidden] { display:none; }
   .avrow { display:flex; gap:8px; align-items:center; }
   .avrow select { flex:1; }
   #m-avatar-img { width:48px; height:48px; border-radius:10px; background:#222; object-fit:cover; }
@@ -193,6 +194,7 @@
       <h3>Fahren</h3>
       <div class="field">Gas<div class="seg" id="m-gas"><button data-v="auto">Automatisch</button><button data-v="manual">Selbst (A halten)</button></div></div>
       <div class="field">Driften<div class="seg" id="m-drift"><button data-v="button">R-Taste halten</button><button data-v="auto">Auto bei vollem Lenken</button></div></div>
+      <div class="field" id="m-vol-f" hidden>Lautstärketasten (App)<div class="seg" id="m-vol"><button data-v="on">L / R (Drift)</button><button data-v="off">Lautstärke</button></div></div>
       <div class="field">Item-Taste links beim Lenken<div class="seg" id="m-left"><button data-v="on">Ja</button><button data-v="off">Nein</button></div></div>
       <div class="hint" id="gasnote"></div>
       <h3>Lenken</h3>
@@ -399,7 +401,10 @@
 
   const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  if (!standalone && ios) $('installhint').textContent = 'Tipp für Vollbild: Teilen-Symbol → „Zum Home-Bildschirm“, dann von dort starten.';
+  // The iPhone app (gamenight/ios): the same page in a WebView, with the volume keys as L and R.
+  const APP = !!(window.GN_APP && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gnApp);
+  const toApp = (m) => { if (APP) try { window.webkit.messageHandlers.gnApp.postMessage(m); } catch (_) {} };
+  if (!standalone && ios && !APP) $('installhint').textContent = 'Tipp für Vollbild: Teilen-Symbol → „Zum Home-Bildschirm“, dann von dort starten.';
 
   // ---- ports ----
   // Each port: its game window (LAN mode), its kart 1-4 there, and whether it drives or is
@@ -467,8 +472,8 @@
     show('pad');
     if (!q.partner && store.get('tipped', '') !== '2') {
       store.set('tipped', '2');
-      toast(gas === 'auto' ? 'Gas gibt das Spiel im Rennen von selbst. Rechts R halten = Driften, X = Item (auch links oben). B = Bremse.'
-                           : 'A = Gas, R halten = Driften, X = Item (auch links oben), B = Bremse.', 6000);
+      toast(gas === 'auto' ? 'Gas gibt das Spiel im Rennen von selbst. Rechts R halten = Driften, R im Sprung = Trick, X = Item (auch links oben). B = Bremse.'
+                           : 'A = Gas, R halten = Driften, R im Sprung = Trick, X = Item (auch links oben), B = Bremse.', 6000);
     }
     wake();
   }
@@ -516,6 +521,7 @@
   // later) a switch toggled through its label ticks the Taptic Engine, nothing happens elsewhere.
   const hap = $('hap');
   function buzz() {
+    if (APP) { toApp({ haptic: true }); return; }
     if (navigator.vibrate) { navigator.vibrate(10); return; }
     try { hap.click(); } catch (_) {}
   }
@@ -675,6 +681,16 @@
   }
   for (const b of $('m-gas').children) b.onclick = () => { gas = b.dataset.v; store.set('gas', gas); sendOpts(); showDrive(); };
   for (const b of $('m-drift').children) b.onclick = () => { driftMode = b.dataset.v; store.set('drift', driftMode); showDrive(); };
+  // The app's volume keys: up is R, down is L (both drift); on by default in the app.
+  let volKeys = store.get('volkeys', 'on');
+  window.gnKey = (b, down) => { if (myPort && (b === 'L' || b === 'R')) press(b, down); };
+  function showVol() {
+    $('m-vol-f').hidden = !APP;
+    for (const b of $('m-vol').children) b.classList.toggle('on', b.dataset.v === volKeys);
+    toApp({ volumeKeys: volKeys === 'on' });
+  }
+  for (const b of $('m-vol').children) b.onclick = () => { volKeys = b.dataset.v; store.set('volkeys', volKeys); showVol(); };
+  showVol();
   for (const b of $('m-left').children) b.onclick = () => { leftItem = b.dataset.v; store.set('litem', leftItem); showDrive(); };
   showDrive();
 
@@ -715,7 +731,7 @@
   // ---- a newer join page ----
   // Home screen apps keep a page for a long time. The hosted page compares its build with the
   // one online and loads the new one, though never mid-race; service workers of older pages go.
-  const BUILD = '28dad7f-20261023101122';
+  const BUILD = '3bd638d-20261025183905';
   async function checkUpdate() {
     if (!HOSTED || BUILD === 'dev') return;
     try {
