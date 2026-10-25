@@ -64,6 +64,7 @@
   .port.busy { opacity:.45; }
   /* a co-op partner: same kart colour, dashed */
   .port.partner.free { border-style:dashed; }
+  a.ghost { text-decoration:none; display:inline-block; }
   .ghost { background:var(--panel); color:var(--fg); padding:10px 14px; border-radius:12px; font-size:15px; }
 
   /* pad */
@@ -94,6 +95,16 @@
   .cluster .cap { font-size:4.6px; font-weight:800; letter-spacing:.04em; }
   /* auto-gas while racing: A glows */
   .cluster #A.auto circle { stroke:#b9ffcf; stroke-width:2.5; }
+  /* the C-stick, yellow like the GameCube's, below and left of the buttons */
+  #cstick { position:absolute; left:68%; bottom:0; width:28%; aspect-ratio:1; border-radius:50%; background:#6b5a00; box-shadow:inset 0 0 0 3px rgba(0,0,0,.25); touch-action:none; z-index:1; }
+  #cknob { position:absolute; left:50%; top:50%; width:62%; height:62%; border-radius:50%; background:radial-gradient(circle at 40% 35%, #fff3a0, #ffd400 60%, #c9a400); transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,.25); pointer-events:none; }
+  #cstick span { position:absolute; left:0; right:0; bottom:-.2em; text-align:center; font-size:clamp(10px, 2.8vmin, 14px); color:#c3bdf0; pointer-events:none; transform:translateY(100%); }
+  /* the helper layout (default): DRIFT stands in for R, ITEM on the left for X; the classic
+     GameCube layout has every button once and nothing else */
+  body:not(.classic) .sh[data-b="R"] { visibility:hidden; }
+  body:not(.classic) #X { display:none; }
+  body.classic .cluster { margin-left:auto; }
+  body.classic .drift, body.classic .litem, body.classic .cluster .cap { display:none; }
   #hap { position:fixed; left:-50px; top:0; opacity:0; pointer-events:none; }
   #stickzone { position:absolute; inset:0; touch-action:none; }
   /* the control stick in its octagonal gate */
@@ -141,6 +152,7 @@
   <input id="room" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" hidden>
   <input id="name" maxlength="16" placeholder="Dein Name" autocomplete="nickname" enterkeyhint="go">
   <button class="primary" id="go">Los</button>
+  <a class="ghost" id="openapp" hidden>In der App öffnen</a>
   <div class="hint" id="installhint"></div>
 </section>
 
@@ -180,6 +192,7 @@
           <g id="B" data-b="B"><circle cx="24" cy="80" r="15" fill="transparent"/><circle cx="24" cy="80" r="11" fill="var(--b)"/><text x="24" y="80.5" fill="#fff">B</text><text class="cap" id="bcap" x="24" y="98" fill="#c3bdf0">BREMSE</text></g>
           <g id="A" data-b="A"><circle cx="56" cy="56" r="21" fill="var(--a)"/><text x="56" y="54" fill="#fff" style="font-size:15px">A</text><text class="cap" id="acap" x="56" y="66" fill="#eafff0">GAS</text></g>
         </svg>
+        <div id="cstick"><div id="cknob"></div></div>
       </div>
     </div>
   </div>
@@ -192,6 +205,7 @@
       <div class="seg" id="m-mode"><button data-m="solo">Einzeln (1 pro Kart)</button><button data-m="team">Team (2 pro Kart)</button></div>
       <label class="field"><span id="m-avatar-l">Dein Avatar</span><span class="avrow"><img id="m-avatar-img" alt="" hidden><select id="m-avatar"><option value="-1">– keiner –</option></select></span></label>
       <h3>Fahren</h3>
+      <div class="field">Tasten<div class="seg" id="m-layout"><button data-v="help">Mit Fahrhilfen</button><button data-v="classic">GameCube klassisch</button></div></div>
       <div class="field">Gas<div class="seg" id="m-gas"><button data-v="auto">Automatisch</button><button data-v="manual">Selbst (A halten)</button></div></div>
       <div class="field">Driften<div class="seg" id="m-drift"><button data-v="button">R-Taste halten</button><button data-v="auto">Auto bei vollem Lenken</button></div></div>
       <div class="field" id="m-vol-f" hidden>Lautstärketasten (App)<div class="seg" id="m-vol"><button data-v="on">L / R (Drift)</button><button data-v="off">Lautstärke</button></div></div>
@@ -241,11 +255,13 @@
   let gas = store.get('gas', 'auto');          // 'auto' | 'manual'
   let driftMode = store.get('drift', 'button'); // 'button' | 'auto'
   let leftItem = store.get('litem', 'on');      // 'on' | 'off'
+  let layout = store.get('layout', 'help');    // 'help' | 'classic'
   let gasAck = false;        // the game knows auto-gas (older games do not answer)
   let racing = false;        // the game says a race is on
   let autoR = false, fullSince = 0;
   const state = { buttons:0 };
   let stickX = 0, stickY = 0, tiltX = 0, tiltZero = null;
+  let cX = 0, cY = 0;       // the C-stick, -1 to 1
 
   function toast(t, ms) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', ms || 2200); }
   function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
@@ -404,6 +420,15 @@
   // The iPhone app (gamenight/ios): the same page in a WebView, with the volume keys as L and R.
   const APP = !!(window.GN_APP && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.gnApp);
   const toApp = (m) => { if (APP) try { window.webkit.messageHandlers.gnApp.postMessage(m); } catch (_) {} };
+  // On an iPhone with the Game Night app (gamenight/ios) installed, the room code opens in it.
+  function openAppLink() {
+    const code = ($('room').value || room || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const a = $('openapp');
+    a.hidden = !(ios && !APP && code.length >= 3);
+    a.href = 'mkddgn://join?code=' + code;
+  }
+  $('room').addEventListener('input', openAppLink);
+  openAppLink();
   if (!standalone && ios && !APP) $('installhint').textContent = 'Tipp für Vollbild: Teilen-Symbol → „Zum Home-Bildschirm“, dann von dort starten.';
 
   // ---- ports ----
@@ -503,7 +528,8 @@
       if (autoR) buttons |= BITS.R;
     } else autoR = false;
     const l = (buttons & BITS.L) ? 255 : 0, r = (buttons & BITS.R) ? 255 : 0;
-    return new Uint8Array([buttons & 255, buttons >> 8, sx, y, 128, 128, l, r]);
+    const cx = Math.round(128 + cX * 90), cy = Math.round(128 + cY * 90);
+    return new Uint8Array([buttons & 255, buttons >> 8, sx, y, cx, cy, l, r]);
   }
   function send() { if (ws && ws.readyState === 1 && myPort) ws.send(packet()); }
   setInterval(send, 33);
@@ -586,6 +612,23 @@
   };
   zone.addEventListener('pointerup', endStick);
   zone.addEventListener('pointercancel', endStick);
+
+  // C-stick: its own ring, the knob follows the thumb from the ring's centre.
+  const cz = $('cstick'), ck = $('cknob');
+  let cId = null;
+  function moveC(e) {
+    const r = cz.getBoundingClientRect(), R = r.width / 2;
+    let dx = (e.clientX - (r.left + R)) / R, dy = (e.clientY - (r.top + R)) / R;
+    const len = Math.hypot(dx, dy); if (len > 1) { dx /= len; dy /= len; }
+    cX = dx; cY = -dy;
+    ck.style.transform = 'translate(calc(-50% + ' + dx * R * .38 + 'px), calc(-50% + ' + dy * R * .38 + 'px))';
+    send();
+  }
+  cz.addEventListener('pointerdown', (e) => { if (cId !== null) return; e.preventDefault(); e.stopPropagation(); cId = e.pointerId; cz.setPointerCapture(cId); moveC(e); }, { passive:false });
+  cz.addEventListener('pointermove', (e) => { if (e.pointerId === cId) moveC(e); });
+  const endC = (e) => { if (e.pointerId !== cId) return; cId = null; cX = cY = 0; ck.style.transform = 'translate(-50%,-50%)'; send(); };
+  cz.addEventListener('pointerup', endC);
+  cz.addEventListener('pointercancel', endC);
 
   // ---- tilt ----
   function screenAngle() { return (screen.orientation && screen.orientation.angle) || window.orientation || 0; }
@@ -674,11 +717,19 @@
     for (const b of $('m-drift').children) b.classList.toggle('on', b.dataset.v === driftMode);
     for (const b of $('m-left').children) b.classList.toggle('on', b.dataset.v === leftItem);
     document.body.classList.toggle('noleft', leftItem === 'off');
+    document.body.classList.toggle('classic', layout === 'classic');
+    for (const b of $('m-layout').children) b.classList.toggle('on', b.dataset.v === layout);
     const partner = document.body.classList.contains('partner');
     $('A').classList.toggle('auto', gas === 'auto' && gasAck && racing && !partner);
     $('gasnote').textContent = gas === 'auto' && !gasAck && ws && ws.readyState === 1
       ? 'Diese Spielversion gibt noch kein Auto-Gas: bitte A halten.' : '';
   }
+  // The classic layout is the plain GameCube pad: gas is A again (switch it back if wanted).
+  for (const b of $('m-layout').children) b.onclick = () => {
+    layout = b.dataset.v; store.set('layout', layout);
+    if (layout === 'classic' && gas !== 'manual') { gas = 'manual'; store.set('gas', gas); sendOpts(); }
+    showDrive();
+  };
   for (const b of $('m-gas').children) b.onclick = () => { gas = b.dataset.v; store.set('gas', gas); sendOpts(); showDrive(); };
   for (const b of $('m-drift').children) b.onclick = () => { driftMode = b.dataset.v; store.set('drift', driftMode); showDrive(); };
   // The app's volume keys: up is R, down is L (both drift); on by default in the app.
@@ -731,7 +782,7 @@
   // ---- a newer join page ----
   // Home screen apps keep a page for a long time. The hosted page compares its build with the
   // one online and loads the new one, though never mid-race; service workers of older pages go.
-  const BUILD = '3bd638d-20261025183905';
+  const BUILD = '214d5d9-20261025221417';
   async function checkUpdate() {
     if (!HOSTED || BUILD === 'dev') return;
     try {
